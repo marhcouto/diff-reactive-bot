@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>wall_following_diff_robot</name>
+  <version>0.0.1</version>
+  <description>Pretty self-explanatory name</description>
+  <maintainer email="up201906086@edu.fe.up.pt">Marcelo Couto</maintainer>
+  <maintainer email="up201906166@edu.fe.up.pt">Bruno Mendes</maintainer>
+  <maintainer email="up201907216@edu.fe.up.pt">José Costa</maintainer>
+  <maintainer email="up201905951@edu.fe.up.pt">Fernando Rego</maintainer>
+  <license>MIT License</license>
+
+  <!-- write all your dependencies here -->
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>flatland_msgs</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
