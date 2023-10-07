@@ -15,10 +15,6 @@ class SerpController(Node):
     def __init__(self) -> None:
         super().__init__("SerpController")
 
-        # If false, robot performs random pathing mode
-        # If true, robot performs keyboard control mode, but first make sure the keyboard reader node is running
-        self.use_keyboard = False
-
         # Predefined speed for the robot
         self.linear_speed = 0.5
         self.angular_speed = 1.5
@@ -27,20 +23,9 @@ class SerpController(Node):
         # If lower performs an action depending on the mode
         self.min_distance = 0.2
 
-        # For keyboard control mode, if true linear speed is halfed
-        self.slow_down = False
-
-        # For random pathing model, if >0 rotate robot only has anguçar speed
+        # For random pathing model, if > 0 rotate robot only has angular speed
         self.rotation_iterations_left = 0
-
-        # Save which keys are pressed
-        self.keys_pressed = {
-            'up':False,
-            'down':False,
-            'left':False,
-            'right':False
-        }
-
+        
         # **** Create publishers ****
         self.pub:Publisher = self.create_publisher(Twist, "/cmd_vel", 1)
         # ***************************
@@ -49,11 +34,6 @@ class SerpController(Node):
         self.create_subscription(LaserScan, "/static_laser", self.processLiDAR, 1)
 
         self.create_subscription(Collisions, "/collisions", self.processCollisions, 1)
-        
-        # Only in keyboard control mode
-        if self.use_keyboard:
-            self.create_subscription(String, "/teleopkeys", self.processKeystrokes, 10)
-        # ******************************
 
     # Change the speed of the robot
     def change_robot_speeds(self, publisher, linear, angular):
@@ -76,10 +56,7 @@ class SerpController(Node):
     
     # Handle LiDAR data
     def processLiDAR(self, data):
-        if self.use_keyboard:
-            self.check_closest_obstacle(data)
-        else:
-            self.random_path(data)
+        self.random_path(data)
 
     def random_path(self, data):
         if self.rotation_iterations_left == 0:
@@ -127,41 +104,7 @@ class SerpController(Node):
     
     # Process collisions
     def processCollisions(self, data):
-        if len(data.collisions) > 0:
-            self.rotation_iterations_left = 0
-            
-            self.change_robot_speeds(self.pub, 0.0, 0.0)
-
-            # Move robot to initial position
-            self.move_model("serp", 0.0, 0.0, -1.57079632679)
-
-    #Process keystroke messages
-    def processKeystrokes(self, data):
-        str = data.data
-        self.register_keystroke(str[2:], str[0] == 'p')
-        
-        self.teleopkeys()
-    
-    # Use the keystrokes received to save which keys are pressed
-    def register_keystroke(self, key, is_pressed):
-        match key:
-            case 'up': self.keys_pressed['up'] = is_pressed
-            case 'down': self.keys_pressed['down'] = is_pressed
-            case 'left': self.keys_pressed['left'] = is_pressed
-            case 'right': self.keys_pressed['right'] = is_pressed
-
-    # Based on which keys are pressed, change the robots speed
-    def teleopkeys(self):
-        linear_speed = 0.0
-        angular_speed = 0.0
-        if self.keys_pressed['up']: linear_speed += self.linear_speed
-        if self.keys_pressed['down']: linear_speed -= self.linear_speed
-        if self.keys_pressed['left']: angular_speed += self.angular_speed
-        if self.keys_pressed['right']: angular_speed -= self.angular_speed
-
-        if self.slow_down: linear_speed /= 2
-
-        self.change_robot_speeds(self.pub, linear_speed, angular_speed)
+    	return
 
 def main(args = None):
     rclpy.init()

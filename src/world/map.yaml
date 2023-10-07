@@ -1,4 +1,4 @@
-image: maze.png
+image: map.png
 resolution: 0.025
 origin: [-0.8, -4.2, 0.0]
 negate: 0

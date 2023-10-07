@@ -4,7 +4,6 @@ bodies:
 
   - name: base_link
     enabled: true
-    pose: [0, 0, 0]
     type: dynamic
     color: [0, 0, 1, 0.75]
     footprints:
