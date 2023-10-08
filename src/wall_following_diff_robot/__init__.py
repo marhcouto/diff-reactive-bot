@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import math
 import random
-
+import numpy as np
 import rclpy
 from rclpy.publisher import Publisher
 from rclpy.node import Node
@@ -11,36 +11,28 @@ from std_msgs.msg import String
 from flatland_msgs.srv import MoveModel
 from flatland_msgs.msg import Collisions
 
+
 class SerpController(Node):
+
     def __init__(self) -> None:
         super().__init__("SerpController")
 
+        #!
         # Predefined speed for the robot
         self.linear_speed = 0.5
         self.angular_speed = 1.5
 
-        # Minimum distance from obstacles in every direction
-        # If lower performs an action depending on the mode
-        self.min_distance = 0.2
-
-        # For random pathing model, if > 0 rotate robot only has angular speed
-        self.rotation_iterations_left = 0
+        #!
+        # Goal distance from wall
+        self.ideal_distance = 0.2
         
         # **** Create publishers ****
-        self.pub:Publisher = self.create_publisher(Twist, "/cmd_vel", 1)
+        self.pub: Publisher = self.create_publisher(Twist, "/cmd_vel", 1)
         # ***************************
 
         # **** Create subscriptions ****
         self.create_subscription(LaserScan, "/static_laser", self.processLiDAR, 1)
 
-        self.create_subscription(Collisions, "/collisions", self.processCollisions, 1)
-
-    # Change the speed of the robot
-    def change_robot_speeds(self, publisher, linear, angular):
-        twist_msg = Twist()
-        twist_msg.linear.x = linear
-        twist_msg.angular.z = angular
-        publisher.publish(twist_msg)
 
     # Send a request to move a model
     def move_model(self, model_name, x, y, theta):
@@ -53,65 +45,39 @@ class SerpController(Node):
         request.pose.y = y
         request.pose.theta = theta
         client.call_async(request)
-    
-    # Handle LiDAR data
-    def processLiDAR(self, data):
-        self.random_path(data)
 
-    def random_path(self, data):
-        if self.rotation_iterations_left == 0:
 
-            # Find reading from laser in front
-            front_laser = data.ranges[math.floor(len(data.ranges) / 2 + 0.5)]
+    #! 
+    # @brief Control the robot to follow the wall
+    # @param publisher Publisher to publish Twist messages
+    # @param min_distance Minimum distance from the wall from a laser
+    # @param angle_with_wall Angle with the wall
+    # @return None
+    def controlRobot(self, publisher: Publisher, min_distance: float, angle_with_wall: float):
+        # Control the robot to follow the wall
+        pass
 
-            if front_laser < self.min_distance:
 
-                # Override predefined angular speed to 1.570796327 or -1.570796327 rad/s
-                self.angular_speed = 1.570796327 * ((random.randint(0, 1) * 2) - 1)
+    #!
+    # @brief Process LiDAR information
+    # @param data LiDAR data
+    # @return None
+    def processLiDAR(self, data: LaserScan):
+        numpy_ranges = np.array(data.ranges)
+        number_of_lasers = len(numpy_ranges)
+        numpy_ranges = np.vectorize(lambda x: x if x > 0 else 100) (numpy_ranges) 
+        min_distance_measurement, min_distance_index = numpy_ranges.min(), numpy_ranges.argmin()
+        angle_with_wall = min_distance_index * data.angle_increment
+        rclpy.logging.get_logger("SerpController").info("Index: " + str(min_distance_index) + " of " + str(number_of_lasers))
+        rclpy.logging.get_logger("SerpController").info("Angle with wall: " + str(angle_with_wall * 180 / math.pi))
+        self.controlRobot(self.pub, min_distance_measurement, angle_with_wall)
 
-                # Lidar readings arrive every 0.1s
-                # If rotate for 10 iterations, 
-                # total rotation = 1.570796327 rad/s * (0.1s * 10) = 1.570796327 rad = 90º
-                self.rotation_iterations_left = 10
-            else:
-                self.change_robot_speeds(self.pub, self.linear_speed, 0.0)
-                return
-        self.rotation_iterations_left -= 1
-        self.change_robot_speeds(self.pub, 0.0, self.angular_speed)
-
-    def check_closest_obstacle(self,data):
-        # Find the closest reading
-        min_laser = min(data.ranges)
-        if min_laser < self.min_distance:
-
-            # Force the robot to slow down
-            self.slow_down = True
-
-            # Calculate the the direction of the closest laser to print a warning
-            # by dividing the lasers in front, left, right back sections
-            n_lasers = len(data.ranges)
-            quadrant_range = n_lasers // 8
-            min_index = data.ranges.index(min_laser)
-            if abs(min_index - (n_lasers // 2)) <= quadrant_range: 
-                self.get_logger().info('Warning! Wall in the front!')
-            if abs(min_index - (n_lasers // 4)) <= quadrant_range:
-                self.get_logger().info('Warning! Wall to the right!')
-            if abs(min_index - (n_lasers - (n_lasers // 4))) <= quadrant_range:
-                self.get_logger().info('Warning! Wall to the left!')
-            if min_index <= quadrant_range or min_index >= n_lasers - quadrant_range: 
-                self.get_logger().info('Warning! Wall in the back!')
-        else: self.slow_down = False
-    
-    # Process collisions
-    def processCollisions(self, data):
-    	return
 
 def main(args = None):
     rclpy.init()
-    
-    serp = SerpController()
+    controller = SerpController()
+    rclpy.spin(controller)
 
-    rclpy.spin(serp)
 
 if __name__ == "__main__":
     main()
