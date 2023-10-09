@@ -480,7 +480,7 @@ Visualization Manager:
       Value: TopDownOrtho (rviz)
       # initial camera position
       X: 3.3
-      Y: -1.7
+      Y: 1.7
     Saved: ~
 Window Geometry:
   Displays:
