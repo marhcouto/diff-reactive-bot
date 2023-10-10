@@ -46,16 +46,12 @@ class SerpController(Node):
     # @return None
     def controlRobot(self, publisher : Publisher, distance : float, angle_with_wall : float):
         # Control the robot to follow the wall
-        distance_error : float = distance - self.ideal_distance
+        # distance_error : float = distance - self.ideal_distance
         angle_error : float = angle_with_wall - self.ideal_angle
-        rclpy.logging.get_logger("SerpController").debug("Distance error: " + str(distance_error))
-        rclpy.logging.get_logger("SerpController").debug("Angle error: " + str(angle_error))
         twist_msg : Twist = Twist()
-        k: float = 1 # Proportional constant
+        k: float = 2 # Proportional constant
         twist_msg.angular.z : float = angle_error * k
         twist_msg.linear.x : float = self.linear_speed / (1 + abs(angle_error))
-        rclpy.logging.get_logger("SerpController").debug("Linear speed: " + str(twist_msg.linear.x))
-        rclpy.logging.get_logger("SerpController").debug("Angular speed: " + str(twist_msg.angular.z))
         publisher.publish(twist_msg)
 
 
@@ -65,12 +61,9 @@ class SerpController(Node):
     # @return None
     def processLiDAR(self, data : LaserScan):
         numpy_ranges = np.array(data.ranges)
-        number_of_lasers = len(numpy_ranges)
-        numpy_ranges = np.vectorize(lambda x: x if x > 0 else 100) (numpy_ranges) 
+        numpy_ranges = np.nan_to_num(numpy_ranges, nan=1000)
         min_distance_measurement, min_distance_index = numpy_ranges.min(), numpy_ranges.argmin()
         angle_with_wall = min_distance_index * data.angle_increment + data.angle_min
-        rclpy.logging.get_logger("SerpController").debug("Index: " + str(min_distance_index) + " of " + str(number_of_lasers))
-        rclpy.logging.get_logger("SerpController").debug("Angle with wall: " + str(angle_with_wall * 180 / math.pi))
         self.controlRobot(self.pub, min_distance_measurement, angle_with_wall)
 
 
