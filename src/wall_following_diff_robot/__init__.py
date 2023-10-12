@@ -13,29 +13,40 @@ from flatland_msgs.msg import Collisions
 
 
 class SerpController(Node):
-
     def __init__(self) -> None:
         super().__init__("SerpController")
 
+        # Declare used node parameters
+        self.declare_parameter("linear_speed")
+        self.declare_parameter("ideal_distance")
+        self.declare_parameter("ideal_angle")
+        self.declare_parameter("k")
+        self.declare_parameter("radius")
+
         #!
         # Predefined speed for the robot
-        self.linear_speed = 0.2
+        self.linear_speed = self.get_parameter("linear_speed").get_parameter_value().double_value
+        self.get_logger().info(f"linear speed: {self.linear_speed}")
 
         #!
         # Goal distance from wall
-        self.ideal_distance = 0.2
+        self.ideal_distance = self.get_parameter("ideal_distance").get_parameter_value().double_value
+        self.get_logger().info(f"ideal distance: {self.ideal_distance}")
 
         #!
         # Goal angle with wall
-        self.ideal_angle = -math.pi / 2
+        self.ideal_angle = self.get_parameter("ideal_angle").get_parameter_value().double_value
+        self.get_logger().info(f"ideal angle: {self.ideal_angle}")
 
         #!
         # Proportional constant
-        self.k = 2
+        self.k = self.get_parameter("k").get_parameter_value().double_value
+        self.get_logger().info(f"k: {self.k}")
 
         #!
         # Predefined speed for the robot
-        self.radius = 0.075
+        self.radius = self.get_parameter("radius").get_parameter_value().double_value
+        self.get_logger().info(f"radius: {self.radius}")
 
         # **** Create publishers ****
         self.pub : Publisher = self.create_publisher(Twist, "/cmd_vel", 1)
