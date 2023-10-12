@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import math
-import random
+import time
 import numpy as np
 import rclpy
 from rclpy.publisher import Publisher
@@ -55,6 +55,14 @@ class SerpController(Node):
         # **** Create subscriptions ****
         self.create_subscription(LaserScan, "/static_laser", self.processLiDAR, 1)
 
+        # Create log file and set current instant
+        self.log_file = open("log.txt", "w")
+        self.initial_instant = time.time()
+
+        # Prepare robot start
+        self.stopped = False
+        self.travelled = 0
+
 
     #! 
     # @brief Control the robot to follow the wall
@@ -69,13 +77,21 @@ class SerpController(Node):
         twist_msg : Twist = Twist()
         twist_msg.angular.z : float = angle_error * self.k
         twist_msg.linear.x : float = self.linear_speed / (1 + abs(angle_error))
+        self.travelled += 1
         publisher.publish(twist_msg)
 
     def stopRobot(self, publisher : Publisher):
+        self.stopped = True
         twist_msg : Twist = Twist()
         twist_msg.angular.z : float = 0.0
         twist_msg.linear.x : float = 0.0
         publisher.publish(twist_msg)
+
+        # Collect statistics
+        elapsed = time.time() - self.initial_instant
+        self.log_file.write(f"travelled: {self.travelled}\n")
+        self.log_file.write(f"elapsed: {elapsed}\n")
+        self.log_file.close()
 
     def isInFinalPos(self, distances: [float], min_distance_measurement : float, min_distance_index: float)->bool:
         
@@ -109,6 +125,9 @@ class SerpController(Node):
     # @param data LiDAR data
     # @return None
     def processLiDAR(self, data : LaserScan):
+        if self.stopped:
+            return
+        
         numpy_ranges = np.array(data.ranges)
         numpy_ranges = np.nan_to_num(numpy_ranges, nan=1000)
         min_distance_measurement, min_distance_index = numpy_ranges.min(), numpy_ranges.argmin()

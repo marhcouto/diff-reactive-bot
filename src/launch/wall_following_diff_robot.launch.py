@@ -43,7 +43,7 @@ def generate_launch_description():
             # Robot parameters. Expected by the robot node.
             DeclareLaunchArgument(name="linear_speed", default_value="0.2"),
             DeclareLaunchArgument(name="ideal_distance", default_value="0.2"),
-            DeclareLaunchArgument(name="ideal_angle", default_value="-1.57"),
+            DeclareLaunchArgument(name="ideal_angle", default_value="1.57"),
             DeclareLaunchArgument(name="k", default_value="2.0"),
             DeclareLaunchArgument(name="radius", default_value="0.075"),
 
