@@ -29,7 +29,15 @@ class SerpController(Node):
         #!
         # Goal angle with perpendicular to wall
         self.ideal_angle = -math.pi / 2
-        
+
+        #!
+        # Proportional constant
+        self.k = 8
+
+        #!
+        # Predefined speed for the robot
+        self.radius = 0.075
+
         # **** Create publishers ****
         self.pub : Publisher = self.create_publisher(Twist, "/cmd_vel", 1)
         # ***************************
@@ -51,15 +59,46 @@ class SerpController(Node):
 
         # Create commands
         twist_msg : Twist = Twist()
-        k: float = 8 # Proportional constant
         clamp = lambda n, minn, maxn: min(max(n, minn), maxn) # Clamp function
         twist_msg.angular.z : float = clamp(
-                angle_error * k - distance_error * k, -self.max_absolute_angular_speed, 
+                angle_error * self.k - distance_error * self.k, -self.max_absolute_angular_speed, 
                 self.max_absolute_angular_speed) # Limit angular velocity
         twist_msg.linear.x : float = self.linear_speed / (1 + abs(angle_error))
         
         publisher.publish(twist_msg)
 
+    def stopRobot(self, publisher : Publisher):
+        twist_msg : Twist = Twist()
+        twist_msg.angular.z : float = 0.0
+        twist_msg.linear.x : float = 0.0
+        publisher.publish(twist_msg)
+
+    def isInFinalPos(self, distances: [float], min_distance_measurement : float, min_distance_index: float)->bool:
+        
+        progress = 0
+        angle_between_sensors = (2 * math.pi) / distances.size
+        
+        for i in range(distances.size):
+            d = distances[i] + self.radius
+
+            if progress == 0:
+                if d < 99:
+                    progress += 1
+            
+            if progress == 1:
+                if d > 99:
+                    progress += 1
+                    continue
+                
+                straight_distance = (min_distance_measurement + self.radius) / math.cos(abs(i - min_distance_index) * angle_between_sensors)
+                if abs(straight_distance - d) > 0.2 and abs(straight_distance - d) < 3:
+                    return False
+
+            if progress == 2:
+                if d < 99:
+                    return False
+
+        return True
 
     #!
     # @brief Process LiDAR information
@@ -70,6 +109,10 @@ class SerpController(Node):
         min_distance_measurement, min_distance_index = numpy_ranges.min(), numpy_ranges.argmin() # Closest laser measurement
         angle_with_wall = min_distance_index * data.angle_increment + data.angle_min # Angle with wall perpendicular
         self.controlRobot(self.pub, min_distance_measurement, angle_with_wall)
+        if not self.isInFinalPos(numpy_ranges, min_distance_measurement, min_distance_index):
+            self.controlRobot(self.pub, min_distance_measurement, angle_with_wall)
+        else:
+            self.stopRobot(self.pub)
 
 
 def main(args = None):

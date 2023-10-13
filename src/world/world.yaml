@@ -7,3 +7,8 @@ models:
   - name: serp
     model: "serp.model.yaml"
     pose: [5.0, 4.0, 0]
+
+    # Test values
+    # pose: [6.2, 0.0, 0]
+    # pose: [5, -4.0, 0]
+    # pose: [3, -2.0, 0]

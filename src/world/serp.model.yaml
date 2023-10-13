@@ -7,13 +7,10 @@ bodies:
     type: dynamic
     color: [0, 0, 1, 0.75]
     footprints:
-      - type: polygon
+      - type: circle
+        radius: 0.075
         density: 1
         layers: ["no_laser"]
-        points: [ [-0.117, -0.055],
-                  [0.048, -0.055],
-                  [0.048, 0.055],
-                  [-0.117, 0.055] ]
 
   - name: left_wheel
     color: [1, 1, 0, 0.75] 
@@ -76,7 +73,7 @@ plugins:
     broadcast_tf: true
     origin: [0.0, 0.0, 0.0]
     range: 10
-    angle: {min: -3.14159265359, max: 3.14159265359, increment: 0.06981317007}
+    angle: {min: -3.14159265359, max: 3.14159265359, increment: 0.07059758772111895}
     noise_std_dev: 0.015
     update_rate: 10
     layers: ["static"]

@@ -18,7 +18,6 @@ $ git submodule update --init --recursive
 ```
 $ cd lib/flatland2/
 $ rosdep install -i --from-path src --rosdistro humble -y
-$ sudo rosdep init
 $ colcon build
 $ source install/setup.bash
 $ cd ../../
