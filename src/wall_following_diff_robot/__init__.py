@@ -84,7 +84,7 @@ class SerpController(Node):
                     continue
                 
                 straight_distance = (min_distance_measurement + self.radius) / math.cos(abs(i - min_distance_index) * angle_between_sensors)
-                if (abs(straight_distance - d) > 0.2):
+                if abs(straight_distance - d) > 0.2 and abs(straight_distance - d) < 3:
                     return False
 
             if progress == 2:

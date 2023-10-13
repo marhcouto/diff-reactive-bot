@@ -10,4 +10,5 @@ models:
 
     # Test values
     # pose: [6.2, 0.0, 0]
-    # pose: [5, -2.0, 0]
+    # pose: [5, -4.0, 0]
+    # pose: [3, -2.0, 0]
