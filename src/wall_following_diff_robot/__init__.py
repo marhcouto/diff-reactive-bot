@@ -24,7 +24,7 @@ class SerpController(Node):
 
         #!
         # Goal distance from wall
-        self.ideal_distance = 0.3
+        self.ideal_distance = 0.9
 
         #!
         # Goal angle with perpendicular to wall
@@ -108,7 +108,7 @@ class SerpController(Node):
         numpy_ranges = np.nan_to_num(np.array(data.ranges), nan=100000) # Replace NaNs with large integer
         min_distance_measurement, min_distance_index = numpy_ranges.min(), numpy_ranges.argmin() # Closest laser measurement
         angle_with_wall = min_distance_index * data.angle_increment + data.angle_min # Angle with wall perpendicular
-        self.controlRobot(self.pub, min_distance_measurement, angle_with_wall)
+        
         if not self.isInFinalPos(numpy_ranges, min_distance_measurement, min_distance_index):
             self.controlRobot(self.pub, min_distance_measurement, angle_with_wall)
         else:
