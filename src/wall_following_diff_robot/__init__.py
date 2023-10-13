@@ -19,19 +19,20 @@ class SerpController(Node):
 
         #!
         # Predefined speed for the robot
-        self.linear_speed = 0.2
+        self.linear_speed = 0.5
+        self.max_absolute_angular_speed = math.pi / 2
 
         #!
         # Goal distance from wall
-        self.ideal_distance = 0.2
+        self.ideal_distance = 0.3
 
         #!
-        # Goal angle with wall
+        # Goal angle with perpendicular to wall
         self.ideal_angle = -math.pi / 2
 
         #!
         # Proportional constant
-        self.k = 2
+        self.k = 8
 
         #!
         # Predefined speed for the robot
@@ -52,12 +53,18 @@ class SerpController(Node):
     # @param angle_with_wall Angle with the wall
     # @return None
     def controlRobot(self, publisher : Publisher, distance : float, angle_with_wall : float):
-        # Control the robot to follow the wall
-        # distance_error : float = distance - self.ideal_distance
+        # Calculate errors
         angle_error : float = angle_with_wall - self.ideal_angle
+        distance_error : float = distance - self.ideal_distance
+
+        # Create commands
         twist_msg : Twist = Twist()
-        twist_msg.angular.z : float = angle_error * self.k
+        clamp = lambda n, minn, maxn: min(max(n, minn), maxn) # Clamp function
+        twist_msg.angular.z : float = clamp(
+                angle_error * self.k - distance_error * self.k, -self.max_absolute_angular_speed, 
+                self.max_absolute_angular_speed) # Limit angular velocity
         twist_msg.linear.x : float = self.linear_speed / (1 + abs(angle_error))
+        
         publisher.publish(twist_msg)
 
     def stopRobot(self, publisher : Publisher):
@@ -98,11 +105,10 @@ class SerpController(Node):
     # @param data LiDAR data
     # @return None
     def processLiDAR(self, data : LaserScan):
-        numpy_ranges = np.array(data.ranges)
-        numpy_ranges = np.nan_to_num(numpy_ranges, nan=1000)
-        min_distance_measurement, min_distance_index = numpy_ranges.min(), numpy_ranges.argmin()
-        angle_with_wall = min_distance_index * data.angle_increment + data.angle_min
-
+        numpy_ranges = np.nan_to_num(np.array(data.ranges), nan=100000) # Replace NaNs with large integer
+        min_distance_measurement, min_distance_index = numpy_ranges.min(), numpy_ranges.argmin() # Closest laser measurement
+        angle_with_wall = min_distance_index * data.angle_increment + data.angle_min # Angle with wall perpendicular
+        self.controlRobot(self.pub, min_distance_measurement, angle_with_wall)
         if not self.isInFinalPos(numpy_ranges, min_distance_measurement, min_distance_index):
             self.controlRobot(self.pub, min_distance_measurement, angle_with_wall)
         else:
