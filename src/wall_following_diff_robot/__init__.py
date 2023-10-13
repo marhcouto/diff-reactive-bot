@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
 import math
-import random
 import numpy as np
 import rclpy
 from rclpy.publisher import Publisher
 from rclpy.node import Node
-from geometry_msgs.msg import Twist, Pose2D
+from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
-from std_msgs.msg import String
-from flatland_msgs.srv import MoveModel
-from flatland_msgs.msg import Collisions
 
 
 class SerpController(Node):
@@ -23,8 +19,14 @@ class SerpController(Node):
         self.max_absolute_angular_speed = math.pi / 2
 
         #!
-        # Goal distance from wall
+        # Goal distance from wall - safe
+        # used with isInFinalPos1 where there are no assumptions
         self.ideal_distance = 0.9
+
+        #!
+        # Goal distance from wall - smaller
+        # used with isInFinalPos2 to minimize distance but assumes small final straight
+        # self.ideal_distance = 0.6
 
         #!
         # Goal angle with perpendicular to wall
@@ -73,7 +75,7 @@ class SerpController(Node):
         twist_msg.linear.x : float = 0.0
         publisher.publish(twist_msg)
 
-    def isInFinalPos(self, distances: [float], min_distance_measurement : float, min_distance_index: float)->bool:
+    def isInFinalPos1(self, distances: [float], min_distance_measurement : float, min_distance_index: float) -> bool:
         
         progress = 0
         angle_between_sensors = (2 * math.pi) / distances.size
@@ -100,6 +102,30 @@ class SerpController(Node):
 
         return True
 
+    # Assuming that the final straight is short
+    def isInFinalPos2(self, distances: [float], min_distance_measurement : float, min_distance_index: float) -> bool:
+        
+        progress = 0
+
+        for i in range(distances.size - 1):
+            if progress == 0:
+                if distances[i] < 99:
+                    progress += 1
+            
+            if progress == 1:
+                if distances[i] > 99:
+                    progress += 1
+                    continue
+                
+                if abs(distances[i] - distances[i + 1]) > (1.5 * self.radius) and abs(distances[i] - distances[i + 1]) < 3:
+                    return False
+
+            if progress == 2:
+                if distances[i] < 99:
+                    return False
+        self.get_logger().info('Warning! Wall in the front!')
+        return True
+    
     #!
     # @brief Process LiDAR information
     # @param data LiDAR data
@@ -109,7 +135,8 @@ class SerpController(Node):
         min_distance_measurement, min_distance_index = numpy_ranges.min(), numpy_ranges.argmin() # Closest laser measurement
         angle_with_wall = min_distance_index * data.angle_increment + data.angle_min # Angle with wall perpendicular
         
-        if not self.isInFinalPos(numpy_ranges, min_distance_measurement, min_distance_index):
+        if not self.isInFinalPos1(numpy_ranges, min_distance_measurement, min_distance_index):
+        # if not self.isInFinalPos2(numpy_ranges, min_distance_measurement, min_distance_index):
             self.controlRobot(self.pub, min_distance_measurement, angle_with_wall)
         else:
             self.stopRobot(self.pub)
