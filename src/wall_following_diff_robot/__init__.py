@@ -17,11 +17,13 @@ class SerpController(Node):
         super().__init__("SerpController")
 
         # Declare used node parameters
-        self.declare_parameter("linear_speed")
-        self.declare_parameter("ideal_distance")
-        self.declare_parameter("ideal_angle")
-        self.declare_parameter("k")
-        self.declare_parameter("radius")
+        self.declare_parameters(namespace="", parameters=[
+            ("linear_speed", rclpy.Parameter.Type.DOUBLE),
+            ("ideal_distance", rclpy.Parameter.Type.DOUBLE),
+            ("ideal_angle", rclpy.Parameter.Type.DOUBLE),
+            ("k", rclpy.Parameter.Type.DOUBLE),
+            ("radius", rclpy.Parameter.Type.DOUBLE)
+        ])
 
         #!
         # Predefined speed for the robot
@@ -62,7 +64,6 @@ class SerpController(Node):
         # Prepare robot start
         self.stopped = False
         self.travelled = 0
-
 
     #! 
     # @brief Control the robot to follow the wall

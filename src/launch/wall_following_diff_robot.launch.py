@@ -75,7 +75,7 @@ def generate_launch_description():
                     {"ideal_distance": ideal_distance},
                     {"ideal_angle": ideal_angle},
                     {"k": k},
-                    {"radius": radius}
+                    {"radius": radius},
                 ]
             ),
 

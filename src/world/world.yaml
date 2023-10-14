@@ -6,7 +6,10 @@ layers:
 models:
   - name: serp
     model: "serp.model.yaml"
-    pose: [5.0, 4.0, 0]
+    pose:
+      - $eval env("ROBOT_POS_X", 5.0)
+      - $eval env("ROBOT_POS_Y", 4.0)
+      - 0.0
 
     # Test values
     # pose: [6.2, 0.0, 0]
