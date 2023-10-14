@@ -8,6 +8,8 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
 
+MAX_ABSOLUTE_ANGULAR_SPEED = math.pi / 2
+
 
 class SerpController(Node):
     def __init__(self) -> None:
@@ -42,8 +44,6 @@ class SerpController(Node):
         self.k = self.get_parameter("k").get_parameter_value().double_value
         self.get_logger().info(f"k: {self.k}")
 
-        self.max_absolute_angular_speed = math.pi / 2
-
         #!
         # Goal angle with perpendicular to wall
         self.ideal_angle = -math.pi / 2
@@ -53,13 +53,6 @@ class SerpController(Node):
         self.radius = self.get_parameter("radius").get_parameter_value().double_value
         self.get_logger().info(f"radius: {self.radius}")
 
-        # **** Create publishers ****
-        self.pub : Publisher = self.create_publisher(Twist, "/cmd_vel", 1)
-        # ***************************
-
-        # **** Create subscriptions ****
-        self.create_subscription(LaserScan, "/static_laser", self.processLiDAR, 1)
-
         # Create log file and set current instant
         self.log_file = open("log.txt", "w")
         self.initial_instant = time.time()
@@ -67,6 +60,14 @@ class SerpController(Node):
         # Prepare robot start
         self.stopped = False
         self.travelled = 0
+
+        # **** Create publishers ****
+        self.pub : Publisher = self.create_publisher(Twist, "/cmd_vel", 1)
+        # ***************************
+
+        # **** Create subscriptions ****
+        self.create_subscription(LaserScan, "/static_laser", self.processLiDAR, 1)
+
 
     #! 
     # @brief Control the robot to follow the wall
@@ -82,13 +83,18 @@ class SerpController(Node):
         # Create commands
         twist_msg : Twist = Twist()
         clamp = lambda n, minn, maxn: min(max(n, minn), maxn) # Clamp function
+        # Angular velocity is proportional to the angle error and simetrically proportional to the distance error
         twist_msg.angular.z : float = clamp(
-                angle_error * self.k - distance_error * self.k, -self.max_absolute_angular_speed, 
-                self.max_absolute_angular_speed) # Limit angular velocity
+                angle_error * self.k - distance_error * self.k, -MAX_ABSOLUTE_ANGULAR_SPEED, 
+                MAX_ABSOLUTE_ANGULAR_SPEED) # Limit angular velocity
         twist_msg.linear.x : float = self.linear_speed / (1 + abs(angle_error))
-        self.travelled += 1
+        self.travelled += 1 # Collect statistics
         publisher.publish(twist_msg)
 
+
+    #! 
+    # @brief Stop the robot
+    # @param publisher Publisher to publish Twist messages
     def stopRobot(self, publisher : Publisher):
         self.stopped = True
         twist_msg : Twist = Twist()
@@ -102,7 +108,12 @@ class SerpController(Node):
         self.log_file.write(f"elapsed: {elapsed}\n")
         self.log_file.close()
 
-        
+
+    #! 
+    # @brief Check if the robot is in the final position
+    # @param distances Array of distances from the laser
+    # @param min_distance_measurement Minimum distance from the laser
+    # @param min_distance_index Index of the minimum distance from the laser
     def isInFinalPos1(self, distances: [float], min_distance_measurement : float, min_distance_index: float) -> bool:
         
         progress = 0
@@ -131,7 +142,11 @@ class SerpController(Node):
         return True
 
       
-    # Assuming that the final straight is short
+    #! 
+    # @brief Check if the robot is in the final position, assuming that the final straight is short (??)
+    # @param distances Array of distances from the laser
+    # @param min_distance_measurement Minimum distance from the laser
+    # @param min_distance_index Index of the minimum distance from the laser
     def isInFinalPos2(self, distances: [float], min_distance_measurement : float, min_distance_index: float) -> bool:
         
         progress = 0
@@ -165,8 +180,8 @@ class SerpController(Node):
         min_distance_measurement, min_distance_index = numpy_ranges.min(), numpy_ranges.argmin() # Closest laser measurement
         angle_with_wall = min_distance_index * data.angle_increment + data.angle_min # Angle with wall perpendicular
         
-        if not self.isInFinalPos1(numpy_ranges, min_distance_measurement, min_distance_index):
-        # if not self.isInFinalPos2(numpy_ranges, min_distance_measurement, min_distance_index):
+        # if not self.isInFinalPos1(numpy_ranges, min_distance_measurement, min_distance_index):
+        if not self.isInFinalPos2(numpy_ranges, min_distance_measurement, min_distance_index):
             self.controlRobot(self.pub, min_distance_measurement, angle_with_wall)
         else:
             self.stopRobot(self.pub)
