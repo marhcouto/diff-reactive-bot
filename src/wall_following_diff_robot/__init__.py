@@ -19,7 +19,7 @@ class SerpController(Node):
         self.declare_parameters(namespace="", parameters=[
             ("linear_speed", rclpy.Parameter.Type.DOUBLE),
             ("ideal_distance", rclpy.Parameter.Type.DOUBLE),
-            ("ideal_angle", rclpy.Parameter.Type.DOUBLE),
+            ("invert_direction", rclpy.Parameter.Type.BOOL),
             ("k", rclpy.Parameter.Type.DOUBLE),
             ("radius", rclpy.Parameter.Type.DOUBLE)
         ])
@@ -36,13 +36,17 @@ class SerpController(Node):
 
         #!
         # Goal angle with wall
-        self.ideal_angle = self.get_parameter("ideal_angle").get_parameter_value().double_value
-        self.get_logger().info(f"ideal angle: {self.ideal_angle}")
+        self.is_direction_inverted = self.get_parameter("invert_direction").get_parameter_value().bool_value
+        self.get_logger().info(f"direction inverted: {self.is_direction_inverted}")
 
         #!
         # Proportional constant
         self.k = self.get_parameter("k").get_parameter_value().double_value
         self.get_logger().info(f"k: {self.k}")
+
+        #!
+        # Goal angle with perpendicular to wall
+        self.ideal_angle = math.pi / 2 if self.is_direction_inverted else -math.pi / 2
 
         #!
         # Predefined speed for the robot ?
@@ -64,6 +68,8 @@ class SerpController(Node):
         # **** Create subscriptions ****
         self.create_subscription(LaserScan, "/static_laser", self.processLiDAR, 1)
 
+        self.brake = 0
+
 
     #! 
     # @brief Control the robot to follow the wall
@@ -73,6 +79,7 @@ class SerpController(Node):
     # @return None
     def controlRobot(self, publisher : Publisher, distance : float, angle_with_wall : float):
         # Calculate errors
+        self.brake = 0
         angle_error : float = angle_with_wall - self.ideal_angle
         distance_error : float = distance - self.ideal_distance
 
@@ -92,17 +99,24 @@ class SerpController(Node):
     # @brief Stop the robot
     # @param publisher Publisher to publish Twist messages
     def stopRobot(self, publisher : Publisher):
-        self.stopped = True
+        # self.stopped = True
+        self.brake = self.brake + 1
         twist_msg : Twist = Twist()
         twist_msg.angular.z : float = 0.0
-        twist_msg.linear.x : float = 0.0
+
+        self.get_logger().info('Vel: ' + str(self.linear_speed - self.brake * 0.1))
+        if self.linear_speed - self.brake * 0.1 > 0:
+            twist_msg.linear.x : float = self.linear_speed - self.brake * 0.1
+        else:
+            twist_msg.linear.x : float = 0.0
+
         publisher.publish(twist_msg)
 
         # Collect statistics
-        elapsed = time.time() - self.initial_instant
-        self.log_file.write(f"travelled: {self.travelled}\n")
-        self.log_file.write(f"elapsed: {elapsed}\n")
-        self.log_file.close()
+        # elapsed = time.time() - self.initial_instant
+        # self.log_file.write(f"travelled: {self.travelled}\n")
+        # self.log_file.write(f"elapsed: {elapsed}\n")
+        # self.log_file.close()
 
 
     #! 
@@ -127,14 +141,14 @@ class SerpController(Node):
                     progress += 1
                     continue
                 
-                straight_distance = (min_distance_measurement + self.radius) / math.cos(abs(i - min_distance_index) * angle_between_sensors)
-                if abs(straight_distance - d) > 0.2 and abs(straight_distance - d) < 3:
+                straight_distance_to_wall = (min_distance_measurement + self.radius) / math.cos(abs(i - min_distance_index) * angle_between_sensors)
+                if abs(straight_distance_to_wall - d) > 0.2 and abs(straight_distance_to_wall - d) < 3:
                     return False
 
             if progress == 2:
                 if d < 99:
                     return False
-
+        self.get_logger().info('Warning! Wall in the front!')
         return True
 
       
@@ -146,6 +160,7 @@ class SerpController(Node):
     def isInFinalPos2(self, distances: [float], min_distance_measurement : float, min_distance_index: float) -> bool:
         
         progress = 0
+        angle_between_sensors = (2 * math.pi) / distances.size
 
         for i in range(distances.size - 1):
             if progress == 0:
@@ -153,11 +168,15 @@ class SerpController(Node):
                     progress += 1
             
             if progress == 1:
-                if distances[i] > 99:
+                if distances[i + 1] > 99:
                     progress += 1
                     continue
-                
-                if abs(distances[i] - distances[i + 1]) > (1.5 * self.radius) and abs(distances[i] - distances[i + 1]) < 3:
+
+                distance_between_detected_points = math.sqrt((distances[i] * distances[i]) +
+                                                    (distances[i + 1] * distances[i + 1]) -
+                                                    2 * distances[i] * distances[i + 1] * math.cos(angle_between_sensors))
+
+                if distance_between_detected_points > 2 * self.radius and distance_between_detected_points < 2:
                     return False
 
             if progress == 2:

@@ -20,7 +20,7 @@ def generate_launch_description():
     # Robot parameters declaration
     linear_speed = LaunchConfiguration("linear_speed")
     ideal_distance = LaunchConfiguration("ideal_distance")
-    ideal_angle = LaunchConfiguration("ideal_angle")
+    invert_direction = LaunchConfiguration("invert_direction")
     k = LaunchConfiguration("k")
     radius = LaunchConfiguration("radius")
 
@@ -43,7 +43,7 @@ def generate_launch_description():
             # Robot parameters. Expected by the robot node.
             DeclareLaunchArgument(name="linear_speed", default_value="0.5"),
             DeclareLaunchArgument(name="ideal_distance", default_value="0.6"),
-            DeclareLaunchArgument(name="ideal_angle", default_value="1.57"),
+            DeclareLaunchArgument(name="invert_direction", default_value="false"),
             DeclareLaunchArgument(name="k", default_value="8.0"),
             DeclareLaunchArgument(name="radius", default_value="0.075"),
 
@@ -73,7 +73,7 @@ def generate_launch_description():
                 parameters=[
                     {"linear_speed": linear_speed},
                     {"ideal_distance": ideal_distance},
-                    {"ideal_angle": ideal_angle},
+                    {"invert_direction": invert_direction},
                     {"k": k},
                     {"radius": radius},
                 ]
