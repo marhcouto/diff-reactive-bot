@@ -143,7 +143,7 @@ class SerpController(Node):
 
       
     #! 
-    # @brief Check if the robot is in the final position, assuming that the final straight is short (??)
+    # @brief Check if the robot is in the final position, assuming that the final straight is short
     # @param distances Array of distances from the laser
     # @param min_distance_measurement Minimum distance from the laser
     # @param min_distance_index Index of the minimum distance from the laser
