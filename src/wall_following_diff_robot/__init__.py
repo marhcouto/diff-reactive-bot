@@ -45,10 +45,6 @@ class SerpController(Node):
         self.get_logger().info(f"k: {self.k}")
 
         #!
-        # Goal angle with perpendicular to wall
-        self.ideal_angle = -math.pi / 2
-
-        #!
         # Predefined speed for the robot ?
         self.radius = self.get_parameter("radius").get_parameter_value().double_value
         self.get_logger().info(f"radius: {self.radius}")
@@ -85,8 +81,8 @@ class SerpController(Node):
         clamp = lambda n, minn, maxn: min(max(n, minn), maxn) # Clamp function
         # Angular velocity is proportional to the angle error and simetrically proportional to the distance error
         twist_msg.angular.z : float = clamp(
-                angle_error * self.k - distance_error * self.k, -MAX_ABSOLUTE_ANGULAR_SPEED, 
-                MAX_ABSOLUTE_ANGULAR_SPEED) # Limit angular velocity
+                angle_error * self.k + distance_error * self.k * (-1 if self.ideal_angle < 0 else 1),
+                  -MAX_ABSOLUTE_ANGULAR_SPEED, MAX_ABSOLUTE_ANGULAR_SPEED) # Limit angular velocity
         twist_msg.linear.x : float = self.linear_speed / (1 + abs(angle_error))
         self.travelled += 1 # Collect statistics
         publisher.publish(twist_msg)
