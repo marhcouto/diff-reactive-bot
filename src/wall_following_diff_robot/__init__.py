@@ -20,8 +20,7 @@ class SerpController(Node):
             ("linear_speed", rclpy.Parameter.Type.DOUBLE),
             ("ideal_distance", rclpy.Parameter.Type.DOUBLE),
             ("invert_direction", rclpy.Parameter.Type.BOOL),
-            ("k", rclpy.Parameter.Type.DOUBLE),
-            ("radius", rclpy.Parameter.Type.DOUBLE)
+            ("k", rclpy.Parameter.Type.DOUBLE)
         ])
 
         #!
@@ -47,11 +46,6 @@ class SerpController(Node):
         #!
         # Goal angle with perpendicular to wall
         self.ideal_angle = math.pi / 2 if self.is_direction_inverted else -math.pi / 2
-
-        #!
-        # Predefined speed for the robot ?
-        self.radius = self.get_parameter("radius").get_parameter_value().double_value
-        self.get_logger().info(f"radius: {self.radius}")
 
         # Create log file and set current instant
         self.log_file = open("log.txt", "w")
@@ -99,7 +93,6 @@ class SerpController(Node):
     # @brief Stop the robot
     # @param publisher Publisher to publish Twist messages
     def stopRobot(self, publisher : Publisher):
-        # self.stopped = True
         self.brake = self.brake + 1
         twist_msg : Twist = Twist()
         twist_msg.angular.z : float = 0.0
@@ -108,29 +101,30 @@ class SerpController(Node):
         if self.linear_speed - self.brake * 0.1 > 0:
             twist_msg.linear.x : float = self.linear_speed - self.brake * 0.1
         else:
+            self.stopped = True
             twist_msg.linear.x : float = 0.0
-
+            
         publisher.publish(twist_msg)
 
         # Collect statistics
-        # elapsed = time.time() - self.initial_instant
-        # self.log_file.write(f"travelled: {self.travelled}\n")
-        # self.log_file.write(f"elapsed: {elapsed}\n")
-        # self.log_file.close()
-
+        if self.stopped:
+            elapsed = time.time() - self.initial_instant
+            self.log_file.write(f"travelled: {self.travelled}\n")
+            self.log_file.write(f"elapsed: {elapsed}\n")
+            self.log_file.close()
 
     #! 
     # @brief Check if the robot is in the final position
     # @param distances Array of distances from the laser
     # @param min_distance_measurement Minimum distance from the laser
     # @param min_distance_index Index of the minimum distance from the laser
-    def isInFinalPos1(self, distances: [float], min_distance_measurement : float, min_distance_index: float) -> bool:
+    def isInFinalPos1(self, distances: [float], min_distance_measurement : float, 
+                      min_distance_index: float, angle_increment : float) -> bool:
         
         progress = 0
-        angle_between_sensors = (2 * math.pi) / distances.size
-        
+
         for i in range(distances.size):
-            d = distances[i] + self.radius
+            d = distances[i]
 
             if progress == 0:
                 if d < 99:
@@ -141,8 +135,8 @@ class SerpController(Node):
                     progress += 1
                     continue
                 
-                straight_distance_to_wall = (min_distance_measurement + self.radius) / math.cos(abs(i - min_distance_index) * angle_between_sensors)
-                if abs(straight_distance_to_wall - d) > 0.2 and abs(straight_distance_to_wall - d) < 3:
+                distance_to_wall = (min_distance_measurement) / math.cos((abs(i - min_distance_index) * angle_increment))
+                if abs(distance_to_wall - d) > 0.3 and abs(distance_to_wall - d) < 3:
                     return False
 
             if progress == 2:
@@ -157,10 +151,9 @@ class SerpController(Node):
     # @param distances Array of distances from the laser
     # @param min_distance_measurement Minimum distance from the laser
     # @param min_distance_index Index of the minimum distance from the laser
-    def isInFinalPos2(self, distances: [float], min_distance_measurement : float, min_distance_index: float) -> bool:
+    def isInFinalPos2(self, distances: [float], angle_increment : float) -> bool:
         
         progress = 0
-        angle_between_sensors = (2 * math.pi) / distances.size
 
         for i in range(distances.size - 1):
             if progress == 0:
@@ -174,9 +167,9 @@ class SerpController(Node):
 
                 distance_between_detected_points = math.sqrt((distances[i] * distances[i]) +
                                                     (distances[i + 1] * distances[i + 1]) -
-                                                    2 * distances[i] * distances[i + 1] * math.cos(angle_between_sensors))
+                                                    2 * distances[i] * distances[i + 1] * math.cos(angle_increment))
 
-                if distance_between_detected_points > 2 * self.radius and distance_between_detected_points < 2:
+                if distance_between_detected_points > 0.15 and distance_between_detected_points < 2:
                     return False
 
             if progress == 2:
@@ -194,9 +187,10 @@ class SerpController(Node):
         numpy_ranges = np.nan_to_num(np.array(data.ranges), nan=100000) # Replace NaNs with large integer
         min_distance_measurement, min_distance_index = numpy_ranges.min(), numpy_ranges.argmin() # Closest laser measurement
         angle_with_wall = min_distance_index * data.angle_increment + data.angle_min # Angle with wall perpendicular
-        
+
         # if not self.isInFinalPos1(numpy_ranges, min_distance_measurement, min_distance_index):
-        if not self.isInFinalPos2(numpy_ranges, min_distance_measurement, min_distance_index):
+        # if not self.isInFinalPos1(numpy_ranges, min_distance_measurement, min_distance_index, data.angle_increment):
+        if not self.isInFinalPos2(numpy_ranges, data.angle_increment):
             self.controlRobot(self.pub, min_distance_measurement, angle_with_wall)
         else:
             self.stopRobot(self.pub)

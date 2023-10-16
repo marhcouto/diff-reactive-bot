@@ -22,7 +22,6 @@ def generate_launch_description():
     ideal_distance = LaunchConfiguration("ideal_distance")
     invert_direction = LaunchConfiguration("invert_direction")
     k = LaunchConfiguration("k")
-    radius = LaunchConfiguration("radius")
 
     ld = LaunchDescription(
         [
@@ -45,7 +44,6 @@ def generate_launch_description():
             DeclareLaunchArgument(name="ideal_distance", default_value="0.6"),
             DeclareLaunchArgument(name="invert_direction", default_value="false"),
             DeclareLaunchArgument(name="k", default_value="8.0"),
-            DeclareLaunchArgument(name="radius", default_value="0.075"),
 
             # **** Nodes launched by this file ****
             # launch flatland server
@@ -75,7 +73,6 @@ def generate_launch_description():
                     {"ideal_distance": ideal_distance},
                     {"invert_direction": invert_direction},
                     {"k": k},
-                    {"radius": radius},
                 ]
             ),
 
