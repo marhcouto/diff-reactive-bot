@@ -18,11 +18,12 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration("use_sim_time")
 
     # Robot parameters declaration
-    linear_speed = LaunchConfiguration("linear_speed")
+    target_velocity = LaunchConfiguration("target_velocity")
     ideal_distance = LaunchConfiguration("ideal_distance")
     invert_direction = LaunchConfiguration("invert_direction")
     detection_by_line = LaunchConfiguration("detection_by_line")
-    k = LaunchConfiguration("k")
+    k_ang = LaunchConfiguration("k_ang")
+    k_lin = LaunchConfiguration("k_lin")
 
     ld = LaunchDescription(
         [
@@ -41,11 +42,12 @@ def generate_launch_description():
             SetEnvironmentVariable(name="ROSCONSOLE_FORMAT", value="[${severity} ${time} ${logger}]: ${message}"),
 
             # Robot parameters. Expected by the robot node.
-            DeclareLaunchArgument(name="linear_speed", default_value="0.5"),
+            DeclareLaunchArgument(name="target_velocity", default_value="0.5"),
             DeclareLaunchArgument(name="ideal_distance", default_value="0.6"),
             DeclareLaunchArgument(name="invert_direction", default_value="false"),
             DeclareLaunchArgument(name="detection_by_line", default_value="false"),
-            DeclareLaunchArgument(name="k", default_value="8.0"),
+            DeclareLaunchArgument(name="k_ang", default_value="8.0"),
+            DeclareLaunchArgument(name="k_lin", default_value="1.0"),
 
             # **** Nodes launched by this file ****
             # launch flatland server
@@ -71,11 +73,12 @@ def generate_launch_description():
                 executable="wall_following_diff_robot",
                 output="screen",
                 parameters=[
-                    {"linear_speed": linear_speed},
+                    {"target_velocity": target_velocity},
                     {"ideal_distance": ideal_distance},
                     {"invert_direction": invert_direction},
                     {"detection_by_line": detection_by_line},
-                    {"k": k},
+                    {"k_ang": k_ang},
+                    {"k_lin": k_lin},
                 ]
             ),
 

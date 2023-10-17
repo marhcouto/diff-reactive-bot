@@ -7,9 +7,13 @@ from rclpy.publisher import Publisher
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
+from nav_msgs.msg import Odometry
+
 
 MAX_ABSOLUTE_ANGULAR_SPEED = math.pi / 2
+MAX_ABSOLUTE_LINEAR_ACCELERATION = 0.5
 
+clamp = lambda n, minn, maxn: min(max(n, minn), maxn) # Clamp function, used to limit control variables
 
 class SerpController(Node):
     def __init__(self) -> None:
@@ -17,21 +21,26 @@ class SerpController(Node):
 
         # Declare used node parameters
         self.declare_parameters(namespace="", parameters=[
-            ("linear_speed", rclpy.Parameter.Type.DOUBLE),
+            ("target_velocity", rclpy.Parameter.Type.DOUBLE),
             ("ideal_distance", rclpy.Parameter.Type.DOUBLE),
             ("invert_direction", rclpy.Parameter.Type.BOOL),
             ("detection_by_line", rclpy.Parameter.Type.BOOL),
-            ("k", rclpy.Parameter.Type.DOUBLE)
+            ("k_ang", rclpy.Parameter.Type.DOUBLE),
+            ("k_lin", rclpy.Parameter.Type.DOUBLE)
         ])
 
         #!
-        # Predefined speed for the robot
-        self.linear_speed = self.get_parameter("linear_speed").get_parameter_value().double_value
-        self.get_logger().info(f"linear speed: {self.linear_speed}")
+        # Target speed for the robot
+        self.target_velocity : float = self.get_parameter("target_velocity").get_parameter_value().double_value
+        self.get_logger().info(f"target velocity: {self.target_velocity}")
+        
+        #!
+        # Current speed of the robot
+        self.current_velocity : float = 0.0
 
         #!
         # Goal distance from wall
-        self.ideal_distance = self.get_parameter("ideal_distance").get_parameter_value().double_value # 0.6 for isInFinalPos2, 0.9 for isInFinalPos1
+        self.ideal_distance : float = self.get_parameter("ideal_distance").get_parameter_value().double_value # 0.6 for isInFinalPos2, 0.9 for isInFinalPos1
         self.get_logger().info(f"ideal distance: {self.ideal_distance}")
 
         #!
@@ -45,13 +54,15 @@ class SerpController(Node):
         self.get_logger().info(f"Detection by line: {self.is_detection_by_line}")
 
         #!
-        # Proportional constant
-        self.k = self.get_parameter("k").get_parameter_value().double_value
-        self.get_logger().info(f"k: {self.k}")
+        # Proportional constants
+        self.k_ang : float = self.get_parameter("k_ang").get_parameter_value().double_value
+        self.get_logger().info(f"k_ang: {self.k_ang}")
+        self.k_lin : float = self.get_parameter("k_lin").get_parameter_value().double_value
+        self.get_logger().info(f"k_lin: {self.k_lin}")
 
         #!
         # Goal angle with perpendicular to wall
-        self.ideal_angle = math.pi / 2 if self.is_direction_inverted else -math.pi / 2
+        self.ideal_angle : float = math.pi / 2 if self.is_direction_inverted else -math.pi / 2
 
         # Create log file and set current instant
         self.log_file = open("log.txt", "w")
@@ -59,6 +70,7 @@ class SerpController(Node):
 
         # Prepare robot start
         self.stopped = False
+        self.stop_count : int = 0
 
         # **** Create publishers ****
         self.pub : Publisher = self.create_publisher(Twist, "/cmd_vel", 1)
@@ -66,6 +78,7 @@ class SerpController(Node):
 
         # **** Create subscriptions ****
         self.create_subscription(LaserScan, "/static_laser", self.processLiDAR, 1)
+        self.create_subscription(Odometry, "/odom", self.processOdometry, 1)
 
         self.brake = 0
 
@@ -80,19 +93,36 @@ class SerpController(Node):
     # @param angle_with_wall Angle with the wall
     # @return None
     def controlRobot(self, publisher : Publisher, distance : float, angle_with_wall : float):
+        
         # Calculate errors
         self.brake = 0
         angle_error : float = angle_with_wall - self.ideal_angle
         distance_error : float = distance - self.ideal_distance
+        # Limit velocity when turning, proportional to the angle error and target velocity
+        target_speed : float = self.target_velocity / (1 + self.target_velocity * abs(angle_error))
+        velocity_error : float = self.current_velocity - target_speed
 
         # Create commands
         twist_msg : Twist = Twist()
-        clamp = lambda n, minn, maxn: min(max(n, minn), maxn) # Clamp function
         # Angular velocity is proportional to the angle error and simetrically proportional to the distance error
         twist_msg.angular.z : float = clamp(
-                angle_error * self.k + distance_error * self.k * (-1 if self.ideal_angle < 0 else 1),
-                  -MAX_ABSOLUTE_ANGULAR_SPEED, MAX_ABSOLUTE_ANGULAR_SPEED) # Limit angular velocity
-        twist_msg.linear.x : float = self.linear_speed / (1 + abs(angle_error))
+                angle_error * self.k_ang + distance_error * self.k_ang * (-1 if self.ideal_angle < 0 else 1),
+                  -MAX_ABSOLUTE_ANGULAR_SPEED, MAX_ABSOLUTE_ANGULAR_SPEED)
+        twist_msg.linear.x : float = clamp(-velocity_error * self.k_lin, -MAX_ABSOLUTE_LINEAR_ACCELERATION,
+                    MAX_ABSOLUTE_LINEAR_ACCELERATION) # Linear velocity is proportional to the velocity error
+        
+        # Logs
+        self.get_logger().debug('Vel: ' + str(twist_msg.linear.x))
+        self.get_logger().debug('Current vel: ' + str(self.current_velocity))
+        self.get_logger().debug('Target vel: ' + str(target_speed))
+        self.get_logger().debug('Acceleration: ' + str(twist_msg.linear.x))
+        self.get_logger().debug('Current distance: ' + str(distance))
+        self.get_logger().debug('Ideal distance: ' + str(self.ideal_distance))
+        self.get_logger().debug('Current angle: ' + str(angle_with_wall))
+        self.get_logger().debug('Ideal angle: ' + str(self.ideal_angle))
+        self.get_logger().debug('Angular vel: ' + str(twist_msg.angular.z))
+
+        # Publish commands
         publisher.publish(twist_msg)
 
 
@@ -100,22 +130,30 @@ class SerpController(Node):
     # @brief Stop the robot
     # @param publisher Publisher to publish Twist messages
     def stopRobot(self, publisher : Publisher):
-        self.brake = self.brake + 1
         twist_msg : Twist = Twist()
         twist_msg.angular.z : float = 0.0
+        twist_msg.linear.x : float = clamp(-self.current_velocity * self.k_lin, -MAX_ABSOLUTE_LINEAR_ACCELERATION,
+                    MAX_ABSOLUTE_LINEAR_ACCELERATION)
 
-        self.get_logger().info('Vel: ' + str(self.linear_speed - self.brake * 0.1))
-        if self.linear_speed - self.brake * 0.1 > 0:
-            twist_msg.linear.x : float = self.linear_speed - self.brake * 0.1
-        else:
+        # Slow down
+        if self.current_velocity > 0.0001:
+            twist_msg.linear.x : float = clamp(-self.current_velocity * self.k_lin, -MAX_ABSOLUTE_LINEAR_ACCELERATION,
+                    MAX_ABSOLUTE_LINEAR_ACCELERATION)
+            publisher.publish(twist_msg)
+        elif self.current_velocity < -0.0001:
+            twist_msg.linear.x : float = clamp(self.current_velocity * self.k_lin, -MAX_ABSOLUTE_LINEAR_ACCELERATION,
+                    MAX_ABSOLUTE_LINEAR_ACCELERATION)
+            publisher.publish(twist_msg)
+        elif self.stop_count == 5: # To ensure that the speed reads are not noisely zero
+            self.get_logger().info('Robot stopped!')
             self.stopped = True
-            twist_msg.linear.x : float = 0.0
-            
-        publisher.publish(twist_msg)
+        else:
+            self.stop_count += 1
 
         # Collect statistics
         if self.stopped:
             self.collectStatistics()
+
 
     #! 
     # @brief Check if the robot is in the final position
@@ -146,7 +184,7 @@ class SerpController(Node):
             if progress == 2:
                 if d < 99:
                     return False
-        self.get_logger().info('Warning! Wall in the front!')
+        # self.get_logger().info('Warning! Wall in the front!')
         return True
 
       
@@ -179,10 +217,19 @@ class SerpController(Node):
             if progress == 2:
                 if distances[i] < 99:
                     return False
-        self.get_logger().info('Warning! Wall in the front!')
+        # self.get_logger().info('Warning! Wall in the front!')
         return True
     
-    
+
+    #!
+    # @brief Process odometry information
+    # @param data Odometry data
+    # @return None
+    def processOdometry(self, data : Odometry):
+        if self.stopped: return
+        self.current_velocity = math.sqrt(math.pow(data.twist.twist.linear.x, 2) + math.pow(data.twist.twist.linear.y, 2))
+
+
     #!
     # @brief Process LiDAR information
     # @param data LiDAR data
@@ -203,10 +250,12 @@ class SerpController(Node):
         else:
             self.stopRobot(self.pub)
 
+
     #!
     # @brief Collect and write statistics to a file
     # @return None
     def collectStatistics(self):
+        self.get_logger().info('Reached final position! Collecting statistics...')
         elapsed = time.time() - self.initial_instant
         self.log_file.write(f"travelled: {self.distances_to_wall.size}\n")
         self.log_file.write(f"mean_distance_to_wall: {self.distances_to_wall.mean()}\n")
@@ -214,7 +263,7 @@ class SerpController(Node):
         self.log_file.close()
 
 
-def main(args = None):
+def main():
     rclpy.init()
     controller = SerpController()
     rclpy.spin(controller)

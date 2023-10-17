@@ -51,7 +51,7 @@ joints:
         anchor: [0, 0.0725]
 
 plugins:
-  - type: DiffDrive
+  - type: DiffDrive2
     name: serp_diff_drive
     body: base_link
     pub_rate: 10
