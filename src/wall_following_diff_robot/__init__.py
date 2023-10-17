@@ -136,7 +136,7 @@ class SerpController(Node):
                     continue
                 
                 distance_to_wall = (min_distance_measurement) / math.cos((abs(i - min_distance_index) * angle_increment))
-                if abs(distance_to_wall - d) > 0.3 and abs(distance_to_wall - d) < 3:
+                if abs(distance_to_wall - d) > 0.2 and abs(distance_to_wall - d) < 3:
                     return False
 
             if progress == 2:
@@ -184,11 +184,12 @@ class SerpController(Node):
     # @param data LiDAR data
     # @return None
     def processLiDAR(self, data : LaserScan):
+        if self.stopped: return
+
         numpy_ranges = np.nan_to_num(np.array(data.ranges), nan=100000) # Replace NaNs with large integer
         min_distance_measurement, min_distance_index = numpy_ranges.min(), numpy_ranges.argmin() # Closest laser measurement
         angle_with_wall = min_distance_index * data.angle_increment + data.angle_min # Angle with wall perpendicular
 
-        # if not self.isInFinalPos1(numpy_ranges, min_distance_measurement, min_distance_index):
         # if not self.isInFinalPos1(numpy_ranges, min_distance_measurement, min_distance_index, data.angle_increment):
         if not self.isInFinalPos2(numpy_ranges, data.angle_increment):
             self.controlRobot(self.pub, min_distance_measurement, angle_with_wall)
