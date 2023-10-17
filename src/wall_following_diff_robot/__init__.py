@@ -20,6 +20,7 @@ class SerpController(Node):
             ("linear_speed", rclpy.Parameter.Type.DOUBLE),
             ("ideal_distance", rclpy.Parameter.Type.DOUBLE),
             ("invert_direction", rclpy.Parameter.Type.BOOL),
+            ("detection_by_line", rclpy.Parameter.Type.BOOL),
             ("k", rclpy.Parameter.Type.DOUBLE)
         ])
 
@@ -39,6 +40,11 @@ class SerpController(Node):
         self.get_logger().info(f"direction inverted: {self.is_direction_inverted}")
 
         #!
+        # Goal angle with wall
+        self.is_detection_by_line = self.get_parameter("detection_by_line").get_parameter_value().bool_value
+        self.get_logger().info(f"Detection by line: {self.is_detection_by_line}")
+
+        #!
         # Proportional constant
         self.k = self.get_parameter("k").get_parameter_value().double_value
         self.get_logger().info(f"k: {self.k}")
@@ -53,7 +59,6 @@ class SerpController(Node):
 
         # Prepare robot start
         self.stopped = False
-        self.travelled = 0
 
         # **** Create publishers ****
         self.pub : Publisher = self.create_publisher(Twist, "/cmd_vel", 1)
@@ -63,6 +68,9 @@ class SerpController(Node):
         self.create_subscription(LaserScan, "/static_laser", self.processLiDAR, 1)
 
         self.brake = 0
+
+        # metrics
+        self.distances_to_wall = np.array([])
 
 
     #! 
@@ -85,7 +93,6 @@ class SerpController(Node):
                 angle_error * self.k + distance_error * self.k * (-1 if self.ideal_angle < 0 else 1),
                   -MAX_ABSOLUTE_ANGULAR_SPEED, MAX_ABSOLUTE_ANGULAR_SPEED) # Limit angular velocity
         twist_msg.linear.x : float = self.linear_speed / (1 + abs(angle_error))
-        self.travelled += 1 # Collect statistics
         publisher.publish(twist_msg)
 
 
@@ -108,17 +115,14 @@ class SerpController(Node):
 
         # Collect statistics
         if self.stopped:
-            elapsed = time.time() - self.initial_instant
-            self.log_file.write(f"travelled: {self.travelled}\n")
-            self.log_file.write(f"elapsed: {elapsed}\n")
-            self.log_file.close()
+            self.collectStatistics()
 
     #! 
     # @brief Check if the robot is in the final position
     # @param distances Array of distances from the laser
     # @param min_distance_measurement Minimum distance from the laser
     # @param min_distance_index Index of the minimum distance from the laser
-    def isInFinalPos1(self, distances: [float], min_distance_measurement : float, 
+    def isInFinalPosByStraightLine(self, distances: [float], min_distance_measurement : float, 
                       min_distance_index: float, angle_increment : float) -> bool:
         
         progress = 0
@@ -151,7 +155,7 @@ class SerpController(Node):
     # @param distances Array of distances from the laser
     # @param min_distance_measurement Minimum distance from the laser
     # @param min_distance_index Index of the minimum distance from the laser
-    def isInFinalPos2(self, distances: [float], angle_increment : float) -> bool:
+    def isInFinalPosByDistance(self, distances: [float], angle_increment : float) -> bool:
         
         progress = 0
 
@@ -190,11 +194,24 @@ class SerpController(Node):
         min_distance_measurement, min_distance_index = numpy_ranges.min(), numpy_ranges.argmin() # Closest laser measurement
         angle_with_wall = min_distance_index * data.angle_increment + data.angle_min # Angle with wall perpendicular
 
-        # if not self.isInFinalPos1(numpy_ranges, min_distance_measurement, min_distance_index, data.angle_increment):
-        if not self.isInFinalPos2(numpy_ranges, data.angle_increment):
+        self.distances_to_wall = np.append(self.distances_to_wall, [min_distance_measurement])
+
+        if self.is_detection_by_line and not self.isInFinalPosByStraightLine(numpy_ranges, min_distance_measurement, min_distance_index, data.angle_increment):
+            self.controlRobot(self.pub, min_distance_measurement, angle_with_wall)
+        elif not self.is_detection_by_line and not self.isInFinalPosByDistance(numpy_ranges, data.angle_increment):
             self.controlRobot(self.pub, min_distance_measurement, angle_with_wall)
         else:
             self.stopRobot(self.pub)
+
+    #!
+    # @brief Collect and write statistics to a file
+    # @return None
+    def collectStatistics(self):
+        elapsed = time.time() - self.initial_instant
+        self.log_file.write(f"travelled: {self.distances_to_wall.size}\n")
+        self.log_file.write(f"mean_distance_to_wall: {self.distances_to_wall.mean()}\n")
+        self.log_file.write(f"elapsed: {elapsed}\n")
+        self.log_file.close()
 
 
 def main(args = None):

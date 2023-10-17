@@ -21,6 +21,7 @@ def generate_launch_description():
     linear_speed = LaunchConfiguration("linear_speed")
     ideal_distance = LaunchConfiguration("ideal_distance")
     invert_direction = LaunchConfiguration("invert_direction")
+    detection_by_line = LaunchConfiguration("detection_by_line")
     k = LaunchConfiguration("k")
 
     ld = LaunchDescription(
@@ -43,6 +44,7 @@ def generate_launch_description():
             DeclareLaunchArgument(name="linear_speed", default_value="0.5"),
             DeclareLaunchArgument(name="ideal_distance", default_value="0.6"),
             DeclareLaunchArgument(name="invert_direction", default_value="false"),
+            DeclareLaunchArgument(name="detection_by_line", default_value="false"),
             DeclareLaunchArgument(name="k", default_value="8.0"),
 
             # **** Nodes launched by this file ****
@@ -72,6 +74,7 @@ def generate_launch_description():
                     {"linear_speed": linear_speed},
                     {"ideal_distance": ideal_distance},
                     {"invert_direction": invert_direction},
+                    {"detection_by_line": detection_by_line},
                     {"k": k},
                 ]
             ),
