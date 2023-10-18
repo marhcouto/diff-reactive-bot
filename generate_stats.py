@@ -29,7 +29,7 @@ def kill(process):
     subprocess.run(['pkill', '-f', 'rviz'])
     time.sleep(1)
 
-async def run_simulation_and_read_log(pos_x=None, pos_y=None, linear_speed=None):
+async def run_simulation_and_read_log(pos_x=None, pos_y=None, target_velocity=None):
     # delete log file
     file = Path("log.txt")
     if file.exists():
@@ -41,8 +41,8 @@ async def run_simulation_and_read_log(pos_x=None, pos_y=None, linear_speed=None)
     if pos_y is not None:
         cmd += f"export ROBOT_POS_Y={pos_y};"
     cmd += "ros2 launch wall_following_diff_robot wall_following_diff_robot.launch.py"
-    if linear_speed is not None:
-        cmd += f" linear_speed:={linear_speed}"
+    if target_velocity is not None:
+        cmd += f" target_velocity:={target_velocity}"
 
     process = await asyncio.create_subprocess_shell(cmd)
     time.sleep(1)
@@ -73,7 +73,7 @@ def dump_graphics(full_stats):
             plt.savefig(f"travelled_{variable_name}_{value}.png")
             plt.close()
 
-    variable_graphic(full_stats, "linear_speed")
+    variable_graphic(full_stats, "target_velocity")
 
 
 async def main():
@@ -81,12 +81,12 @@ async def main():
 
     for offset_x in range(-2,0):
         for offset_y in range(-3,-1):
-             for linear_speed in range(4, 5):
+             for target_velocity in range(4, 5):
                 stat = await run_simulation_and_read_log(INITIAL_POSITION[0] + offset_x/2,
-                                                           INITIAL_POSITION[1] + offset_y/2, linear_speed/10)
+                                                           INITIAL_POSITION[1] + offset_y/2, target_velocity/10)
                 stat["offset_x"] = offset_x
                 stat["offset_y"] = offset_y
-                stat["linear_speed"] = linear_speed
+                stat["target_velocity"] = target_velocity
                 stats.append(stat)
 
     dump_graphics(stats)
