@@ -70,6 +70,7 @@ class SerpController(Node):
 
         # Prepare robot start
         self.stopped = False
+        self.stop_count = 0
 
         # **** Create publishers ****
         self.pub : Publisher = self.create_publisher(Twist, "/cmd_vel", 1)
@@ -79,10 +80,35 @@ class SerpController(Node):
         self.create_subscription(LaserScan, "/static_laser", self.processLiDAR, 1)
         self.create_subscription(Odometry, "/odom", self.processOdometry, 1)
 
-        self.brake = 0
-
         # metrics
         self.distances_to_wall = np.array([])
+
+
+    #! 
+    # @brief Control the robot to follow the wall, no distance taken into account
+    # @param publisher Publisher to publish Twist messages
+    # @param distance Minimum distance from the wall from a laser
+    # @param angle_with_wall Angle with the wall
+    # @return None
+    def controlRobotOld(self, publisher : Publisher, distance : float, angle_with_wall : float):
+        
+        # Calculate errors
+        angle_error : float = angle_with_wall - self.ideal_angle
+        # Limit velocity when turning, proportional to the angle error and target velocity
+        target_speed : float = self.target_velocity / (1 + self.target_velocity * abs(angle_error))
+        velocity_error : float = self.current_velocity - target_speed
+
+        # Create commands
+        twist_msg : Twist = Twist()
+        # Angular velocity is proportional to the angle error 
+        twist_msg.angular.z : float = clamp(
+                angle_error * self.k_ang,
+                  -MAX_ABSOLUTE_ANGULAR_SPEED, MAX_ABSOLUTE_ANGULAR_SPEED)
+        twist_msg.linear.x : float = clamp(-velocity_error * self.k_lin, -MAX_ABSOLUTE_LINEAR_ACCELERATION,
+                    MAX_ABSOLUTE_LINEAR_ACCELERATION) # Linear velocity is proportional to the velocity error
+        
+        # Publish commands
+        publisher.publish(twist_msg)
 
 
     #! 
@@ -94,7 +120,6 @@ class SerpController(Node):
     def controlRobot(self, publisher : Publisher, distance : float, angle_with_wall : float):
         
         # Calculate errors
-        self.brake = 0
         angle_error : float = angle_with_wall - self.ideal_angle
         distance_error : float = distance - self.ideal_distance
         # Limit velocity when turning, proportional to the angle error and target velocity
@@ -130,12 +155,15 @@ class SerpController(Node):
             twist_msg.linear.x : float = clamp(self.current_velocity * self.k_lin, -MAX_ABSOLUTE_LINEAR_ACCELERATION,
                     MAX_ABSOLUTE_LINEAR_ACCELERATION)
             publisher.publish(twist_msg)
+        elif self.stop_count >= 2:
+            twist_msg.linear.x : float = 0.0
+            publisher.publish(twist_msg)
+            self.get_logger().info('Robot stopped!')
+            self.stopped = True
         else:
             twist_msg.linear.x : float = 0.0
             publisher.publish(twist_msg)
-
-            self.get_logger().info('Robot stopped!')
-            self.stopped = True
+            self.stop_count += 1
 
         # Collect statistics
         if self.stopped:
