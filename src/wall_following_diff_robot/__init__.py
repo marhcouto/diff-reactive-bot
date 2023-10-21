@@ -26,7 +26,8 @@ class SerpController(Node):
             ("invert_direction", rclpy.Parameter.Type.BOOL),
             ("detection_by_line", rclpy.Parameter.Type.BOOL),
             ("k_ang", rclpy.Parameter.Type.DOUBLE),
-            ("k_lin", rclpy.Parameter.Type.DOUBLE)
+            ("k_lin", rclpy.Parameter.Type.DOUBLE),
+            ("old_controller", rclpy.Parameter.Type.BOOL)
         ])
 
         #!
@@ -52,6 +53,11 @@ class SerpController(Node):
         # Goal angle with wall
         self.is_detection_by_line = self.get_parameter("detection_by_line").get_parameter_value().bool_value
         self.get_logger().info(f"Detection by line: {self.is_detection_by_line}")
+
+        #!
+        # Old controller
+        self.is_old_controller = self.get_parameter("old_controller").get_parameter_value().bool_value
+        self.get_logger().info(f"Old controller: {self.is_old_controller}")
 
         #!
         # Proportional constants
@@ -258,10 +264,12 @@ class SerpController(Node):
 
         self.distances_to_wall = np.append(self.distances_to_wall, [min_distance_measurement])
 
+        control_callback = self.controlRobotOld if self.is_old_controller else self.controlRobot
+
         if self.is_detection_by_line and not self.isInFinalPosByStraightLine(numpy_ranges, min_distance_measurement, min_distance_index, data.angle_increment):
-            self.controlRobot(self.pub, min_distance_measurement, angle_with_wall)
+            control_callback(self.pub, min_distance_measurement, angle_with_wall)
         elif not self.is_detection_by_line and not self.isInFinalPosByDistance(numpy_ranges, data.angle_increment):
-            self.controlRobot(self.pub, min_distance_measurement, angle_with_wall)
+            control_callback(self.pub, min_distance_measurement, angle_with_wall)
         else:
             self.stopRobot(self.pub)
 
@@ -275,6 +283,10 @@ class SerpController(Node):
         self.log_file.write(f"travelled: {self.distances_to_wall.size}\n")
         self.log_file.write(f"mean_distance_to_wall: {self.distances_to_wall.mean()}\n")
         self.log_file.write(f"elapsed: {elapsed}\n")
+        self.log_file.write("distances:")
+        for d in self.distances_to_wall:
+            self.log_file.write(f" {d}")
+        self.log_file.write("\n")
         self.log_file.close()
 
 

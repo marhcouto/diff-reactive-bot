@@ -8,14 +8,16 @@ import subprocess
 import matplotlib.pyplot as plt
 import numpy as np
 
+INITIAL_POSITION = [5.0, 4.0]
 
 def retrieve_stats():
     with open("log.txt") as f:
         travelled = float(f.readline().split(" ")[1])
         mean_distance_to_wall = float(f.readline().split(" ")[1])
         elapsed = float(f.readline().split(" ")[1])
+        distances = np.array([float(x) for x in f.readline().split(" ")[1:]])
         return {"travelled": travelled, "mean_distance_to_wall": mean_distance_to_wall,
-                "elapsed": elapsed}
+                "elapsed": elapsed, "distances": distances}
 
 
 def kill(process):
@@ -33,7 +35,8 @@ def kill(process):
 
 async def run_simulation_and_read_log(pos_x=None, pos_y=None,
                                       target_velocity=None, ideal_distance=None,
-                                      k_ang=None, k_lin=None, invert_direction=None):
+                                      k_ang=None, k_lin=None, invert_direction=None,
+                                      old_controller=None, detection_by_line=None):
     # delete log file
     file = Path("log.txt")
     if file.exists():
@@ -55,6 +58,10 @@ async def run_simulation_and_read_log(pos_x=None, pos_y=None,
         cmd += f" k_lin:={k_lin}"
     if invert_direction is not None:
         cmd += f" invert_direction:={invert_direction}"
+    if old_controller is not None:
+        cmd += f" old_controller:={old_controller}"
+    if detection_by_line is not None:
+        cmd += f" detection_by_line:={detection_by_line}"
 
     process = await asyncio.create_subprocess_shell(cmd)
     time.sleep(1)
@@ -65,37 +72,131 @@ async def run_simulation_and_read_log(pos_x=None, pos_y=None,
             kill(process)
             return retrieve_stats()
 
+def dump_metrics_graphics(stats, prefix=""):
+    # stabilize some parameters
+    target_velocity = 0.3
+    ideal_distance = 0.5
+    k_ang = 8.0
+    k_lin = 1.0
+
+    # 2d bar plot with initial position as x
+    filtered_stats = [stat for stat in stats if stat["target_velocity"] == target_velocity and stat["ideal_distance"]
+                      == ideal_distance and stat["k_ang"] == k_ang and stat["k_lin"] == k_lin]
+    for metric in ["travelled", "mean_distance_to_wall", "elapsed"]:
+        plt.figure()
+        xs = [str((stat["offset_x"] + INITIAL_POSITION[0], stat["offset_y"] + INITIAL_POSITION[1])) for stat in filtered_stats]
+        ys = [stat[metric] for stat in filtered_stats]
+        plt.scatter(xs, ys, label=metric)
+        plt.legend()
+        plt.savefig(f"results/{prefix}_initialpos_{metric}.png")
+        plt.close()
+
+    # 3d plot with k_ang as x, k_lin as y and mean_distance_to_wall as z
+    filtered_stats = [stat for stat in stats if stat["target_velocity"] == target_velocity and stat["ideal_distance"]
+                      == ideal_distance and stat["offset_x"] == -2 and stat["offset_y"] == -3]
+    plt.figure()
+    plt.title("mean_distance_to_wall according to k_ang and k_lin")
+    xs = [stat["k_ang"] for stat in filtered_stats]
+    ys = [stat["k_lin"] for stat in filtered_stats]
+    zs = [stat["mean_distance_to_wall"] for stat in filtered_stats]
+    ax = plt.axes(projection='3d')
+    ax.scatter(xs, ys, zs)
+    ax.set_xlabel("k_ang")
+    ax.set_ylabel("k_lin")
+    ax.set_zlabel("mean_distance_to_wall")
+    plt.savefig(f"results/{prefix}_kangklin.png")
+    plt.close()
+
+    # 2d bar plot with ideal_distance as x and mean_distance_to_wall as y
+    filtered_stats = [stat for stat in stats if stat["target_velocity"] == target_velocity
+                      and stat["offset_x"] == -2 and stat["offset_y"] == -3
+                      and stat["k_ang"] == k_ang and stat["k_lin"] == k_lin]
+    plt.figure()
+    plt.title("mean_distance_to_wall according to ideal_distance")
+    xs = [stat["ideal_distance"] for stat in filtered_stats]
+    ys = [stat["mean_distance_to_wall"] for stat in filtered_stats]
+    plt.bar(xs, ys)
+    plt.xlabel("ideal_distance")
+    plt.ylabel("mean_distance_to_wall")
+    plt.savefig(f"results/{prefix}_idealdistance.png")
+
+    # 2d bar plot with target_velocity as x and mean_distance_to_wall as y
+    filtered_stats = [stat for stat in stats if stat["ideal_distance"] == ideal_distance
+                        and stat["offset_x"] == -2 and stat["offset_y"] == -3
+                        and stat["k_ang"] == k_ang and stat["k_lin"] == k_lin]
+    plt.figure()
+    plt.title("mean_distance_to_wall according to target_velocity")
+    xs = [stat["target_velocity"] for stat in filtered_stats]
+    ys = [stat["mean_distance_to_wall"] for stat in filtered_stats]
+    plt.bar(xs, ys)
+    plt.xlabel("target_velocity")
+    plt.ylabel("mean_distance_to_wall")
+    plt.savefig(f"results/{prefix}_targetvelocity.png")
+
+
+def dump_distance_to_wall_graphics(stats, prefix=""):
+    for target_velocity in [0.3, 0.5]:
+        for ideal_distance in [0.5, 0.8, 1.0]:
+            k_ang = 8.0
+            k_lin = 1.0
+            name = f"timeseries_target_velocity={target_velocity}_ideal_distance={ideal_distance}_k_ang={k_ang}_k_lin={k_lin}"
+            plt.figure()
+            plt.title("Distance to wall over time")
+            plt.xlabel("time")
+            plt.ylabel("distance to wall")
+
+            filtered_stats = [stat for stat in stats if stat["target_velocity"] == target_velocity and stat["ideal_distance"]
+                              == ideal_distance and stat["k_ang"] == k_ang and stat["k_lin"] == k_lin]
+
+            if filtered_stats == []:
+                print(f"warning: no stats for {name}")
+                continue
+
+            stat = filtered_stats[0]
+            distances = stat["distances"]
+            x = np.arange(0, len(distances), 1)
+            plt.plot(x, distances)
+            plt.savefig(f"results/{prefix}_{name}.png")
+            plt.close()
+
 
 async def main():
-    INITIAL_POSITION = [5.0, 4.0]
     stats = []
 
+    # remove all pngs inside results folder
+    for file in os.listdir("results"):
+        if file.endswith(".png"):
+            os.remove(os.path.join("results", file))
+
     # independent variables
-    for offset_x in range(-2, 0):
-        for offset_y in range(-3, -1):
-            for invert_direction in [True, False]:
-                for target_velocity in [0.3, 0.5]:
-                    for ideal_distance in [0.5, 0.8, 1.0]:
-                        for k_ang in [8.0, 16.0]:
-                            for k_lin in [1.0, 2.0]:
-                                stat = await run_simulation_and_read_log(INITIAL_POSITION[0] + offset_x/2,
-                                                                         INITIAL_POSITION[1] + offset_y/2, target_velocity,
-                                                                         ideal_distance, k_ang, k_lin, invert_direction)
-                                stat["offset_x"] = offset_x
-                                stat["offset_y"] = offset_y
-                                stat["target_velocity"] = target_velocity
-                                stat["ideal_distance"] = ideal_distance
-                                stat["invert_direction"] = invert_direction
-                                stat["k_ang"] = k_ang
-                                stat["k_lin"] = k_lin
-                                stats.append(stat)
-                                break
-                            break
-                        break
-                    break
-                break
-            break
-        break
+    for old_controller in [False, True]:
+        for offset_x in [-2,0]:
+            for offset_y in [-3,-1]:
+                for invert_direction in [True, False]:
+                    for target_velocity in [0.3, 0.5]:
+                        for ideal_distance in [0.5, 0.8]:
+                            for k_ang in [8.0, 16.0]:
+                                for k_lin in [1.0, 2.0]:
+                                    stat = await run_simulation_and_read_log(INITIAL_POSITION[0] + offset_x/2,
+                                                                            INITIAL_POSITION[1] +
+                                                                            offset_y/2, target_velocity,
+                                                                            ideal_distance, k_ang, k_lin,
+                                                                            invert_direction, old_controller)
+                                    stat["offset_x"] = offset_x
+                                    stat["offset_y"] = offset_y
+                                    stat["target_velocity"] = target_velocity
+                                    stat["ideal_distance"] = ideal_distance
+                                    stat["invert_direction"] = invert_direction
+                                    stat["k_ang"] = k_ang
+                                    stat["k_lin"] = k_lin
+                                    stat["old_controller"] = old_controller
+                                    stats.append(stat)
+
+    for old_controller in [True, False]:
+        prefix = "oldc" if old_controller else "newc"
+        filtered_stats = [stat for stat in stats if stat["old_controller"] == old_controller]
+        dump_distance_to_wall_graphics(filtered_stats, prefix)
+        dump_metrics_graphics(filtered_stats, prefix)
 
 if __name__ == "__main__":
     asyncio.run(main())
