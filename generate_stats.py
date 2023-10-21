@@ -30,7 +30,7 @@ def kill(process):
 
     # kill rviz
     subprocess.run(['pkill', '-f', 'rviz'])
-    time.sleep(1)
+    time.sleep(2)
 
 
 async def run_simulation_and_read_log(pos_x=None, pos_y=None,
@@ -168,29 +168,41 @@ async def main():
         if file.endswith(".png"):
             os.remove(os.path.join("results", file))
 
-    # independent variables
-    for old_controller in [False, True]:
-        for offset_x in [-2,0]:
-            for offset_y in [-3,-1]:
-                for invert_direction in [True, False]:
-                    for target_velocity in [0.3, 0.5]:
-                        for ideal_distance in [0.5, 0.8]:
-                            for k_ang in [8.0, 16.0]:
-                                for k_lin in [1.0, 2.0]:
-                                    stat = await run_simulation_and_read_log(INITIAL_POSITION[0] + offset_x/2,
-                                                                            INITIAL_POSITION[1] +
-                                                                            offset_y/2, target_velocity,
-                                                                            ideal_distance, k_ang, k_lin,
-                                                                            invert_direction, old_controller)
-                                    stat["offset_x"] = offset_x
-                                    stat["offset_y"] = offset_y
-                                    stat["target_velocity"] = target_velocity
-                                    stat["ideal_distance"] = ideal_distance
-                                    stat["invert_direction"] = invert_direction
-                                    stat["k_ang"] = k_ang
-                                    stat["k_lin"] = k_lin
-                                    stat["old_controller"] = old_controller
-                                    stats.append(stat)
+    # if READ environment variable is set, read stats from file
+    if os.environ.get("READ") is not None:
+        with open("stats.txt") as f:
+            for line in f.readlines():
+                stats.append(eval(line))
+    else:
+        # run simulations
+        print("running simulations... stats file will be overwritten")
+        time.sleep(10)
+        with open("stats.txt", "w") as f:
+            for old_controller in [False, True]:
+                for offset_x in [-2,0,2]:
+                    for offset_y in [-2,0,2]:
+                        for invert_direction in [True, False]:
+                            for target_velocity in [0.3, 0.5]:
+                                for ideal_distance in [0.5, 0.8]:
+                                    for k_ang in [8.0, 16.0]:
+                                        for k_lin in [1.0, 2.0]:
+                                            stat = await run_simulation_and_read_log(INITIAL_POSITION[0] + offset_x/2,
+                                                                                    INITIAL_POSITION[1] +
+                                                                                    offset_y/2, target_velocity,
+                                                                                    ideal_distance, k_ang, k_lin,
+                                                                                    invert_direction, old_controller)
+                                            stat["offset_x"] = offset_x
+                                            stat["offset_y"] = offset_y
+                                            stat["target_velocity"] = target_velocity
+                                            stat["ideal_distance"] = ideal_distance
+                                            stat["invert_direction"] = invert_direction
+                                            stat["k_ang"] = k_ang
+                                            stat["k_lin"] = k_lin
+                                            stat["old_controller"] = old_controller
+                                            stats.append(stat)
+                                            f.write(str(stat) + "\n")
+                                            f.flush()
+        f.close()
 
     for old_controller in [True, False]:
         prefix = "oldc" if old_controller else "newc"
