@@ -120,8 +120,6 @@ class SerpController(Node):
     def stopRobot(self, publisher : Publisher):
         twist_msg : Twist = Twist()
         twist_msg.angular.z : float = 0.0
-        twist_msg.linear.x : float = clamp(-self.current_velocity * self.k_lin, -MAX_ABSOLUTE_LINEAR_ACCELERATION,
-                    MAX_ABSOLUTE_LINEAR_ACCELERATION)
 
         # Slow down
         if self.current_velocity > 0.001:
@@ -133,6 +131,9 @@ class SerpController(Node):
                     MAX_ABSOLUTE_LINEAR_ACCELERATION)
             publisher.publish(twist_msg)
         else:
+            twist_msg.linear.x : float = 0.0
+            publisher.publish(twist_msg)
+
             self.get_logger().info('Robot stopped!')
             self.stopped = True
 
@@ -197,7 +198,7 @@ class SerpController(Node):
                                                     (distances[i + 1] * distances[i + 1]) -
                                                     2 * distances[i] * distances[i + 1] * math.cos(angle_increment))
 
-                if distance_between_detected_points > 0.15 and distance_between_detected_points < 2:
+                if distance_between_detected_points > 0.15 and distance_between_detected_points < 3:
                     return False
 
             if progress == 2:
