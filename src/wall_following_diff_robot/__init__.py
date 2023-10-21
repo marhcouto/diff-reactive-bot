@@ -70,7 +70,6 @@ class SerpController(Node):
 
         # Prepare robot start
         self.stopped = False
-        self.stop_count : int = 0
 
         # **** Create publishers ****
         self.pub : Publisher = self.create_publisher(Twist, "/cmd_vel", 1)
@@ -111,17 +110,6 @@ class SerpController(Node):
         twist_msg.linear.x : float = clamp(-velocity_error * self.k_lin, -MAX_ABSOLUTE_LINEAR_ACCELERATION,
                     MAX_ABSOLUTE_LINEAR_ACCELERATION) # Linear velocity is proportional to the velocity error
         
-        # Logs
-        self.get_logger().debug('Vel: ' + str(twist_msg.linear.x))
-        self.get_logger().debug('Current vel: ' + str(self.current_velocity))
-        self.get_logger().debug('Target vel: ' + str(target_speed))
-        self.get_logger().debug('Acceleration: ' + str(twist_msg.linear.x))
-        self.get_logger().debug('Current distance: ' + str(distance))
-        self.get_logger().debug('Ideal distance: ' + str(self.ideal_distance))
-        self.get_logger().debug('Current angle: ' + str(angle_with_wall))
-        self.get_logger().debug('Ideal angle: ' + str(self.ideal_angle))
-        self.get_logger().debug('Angular vel: ' + str(twist_msg.angular.z))
-
         # Publish commands
         publisher.publish(twist_msg)
 
@@ -132,23 +120,22 @@ class SerpController(Node):
     def stopRobot(self, publisher : Publisher):
         twist_msg : Twist = Twist()
         twist_msg.angular.z : float = 0.0
-        twist_msg.linear.x : float = clamp(-self.current_velocity * self.k_lin, -MAX_ABSOLUTE_LINEAR_ACCELERATION,
-                    MAX_ABSOLUTE_LINEAR_ACCELERATION)
 
         # Slow down
-        if self.current_velocity > 0.0001:
+        if self.current_velocity > 0.001:
             twist_msg.linear.x : float = clamp(-self.current_velocity * self.k_lin, -MAX_ABSOLUTE_LINEAR_ACCELERATION,
                     MAX_ABSOLUTE_LINEAR_ACCELERATION)
             publisher.publish(twist_msg)
-        elif self.current_velocity < -0.0001:
+        elif self.current_velocity < -0.001:
             twist_msg.linear.x : float = clamp(self.current_velocity * self.k_lin, -MAX_ABSOLUTE_LINEAR_ACCELERATION,
                     MAX_ABSOLUTE_LINEAR_ACCELERATION)
             publisher.publish(twist_msg)
-        elif self.stop_count == 5: # To ensure that the speed reads are not noisely zero
+        else:
+            twist_msg.linear.x : float = 0.0
+            publisher.publish(twist_msg)
+
             self.get_logger().info('Robot stopped!')
             self.stopped = True
-        else:
-            self.stop_count += 1
 
         # Collect statistics
         if self.stopped:
@@ -178,7 +165,7 @@ class SerpController(Node):
                     continue
                 
                 distance_to_wall = (min_distance_measurement) / math.cos((abs(i - min_distance_index) * angle_increment))
-                if abs(distance_to_wall - d) > 0.2 and abs(distance_to_wall - d) < 3:
+                if abs(distance_to_wall - d) > 0.3 and abs(distance_to_wall - d) < 3:
                     return False
 
             if progress == 2:
@@ -211,7 +198,7 @@ class SerpController(Node):
                                                     (distances[i + 1] * distances[i + 1]) -
                                                     2 * distances[i] * distances[i + 1] * math.cos(angle_increment))
 
-                if distance_between_detected_points > 0.15 and distance_between_detected_points < 2:
+                if distance_between_detected_points > 0.15 and distance_between_detected_points < 3:
                     return False
 
             if progress == 2:
