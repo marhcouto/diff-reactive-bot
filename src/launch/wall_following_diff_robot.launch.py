@@ -24,6 +24,7 @@ def generate_launch_description():
     detection_by_line = LaunchConfiguration("detection_by_line")
     k_ang = LaunchConfiguration("k_ang")
     k_lin = LaunchConfiguration("k_lin")
+    old_controller = LaunchConfiguration("old_controller")
 
     ld = LaunchDescription(
         [
@@ -34,7 +35,7 @@ def generate_launch_description():
                 name="world_path",
                 default_value=PathJoinSubstitution([pkg_share, "world/world.yaml"]),
             ),
-            DeclareLaunchArgument(name="update_rate", default_value="100.0"),
+            DeclareLaunchArgument(name="update_rate", default_value="200.0"),
             DeclareLaunchArgument(name="step_size", default_value="0.01"),
             DeclareLaunchArgument(name="show_viz", default_value="true"),
             DeclareLaunchArgument(name="viz_pub_rate", default_value="30.0"),
@@ -48,6 +49,7 @@ def generate_launch_description():
             DeclareLaunchArgument(name="detection_by_line", default_value="false"),
             DeclareLaunchArgument(name="k_ang", default_value="8.0"),
             DeclareLaunchArgument(name="k_lin", default_value="1.0"),
+            DeclareLaunchArgument(name="old_controller", default_value="false"),
 
             # **** Nodes launched by this file ****
             # launch flatland server
@@ -79,6 +81,7 @@ def generate_launch_description():
                     {"detection_by_line": detection_by_line},
                     {"k_ang": k_ang},
                     {"k_lin": k_lin},
+                    {"old_controller": old_controller},
                 ]
             ),
 

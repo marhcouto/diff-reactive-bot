@@ -26,7 +26,8 @@ class SerpController(Node):
             ("invert_direction", rclpy.Parameter.Type.BOOL),
             ("detection_by_line", rclpy.Parameter.Type.BOOL),
             ("k_ang", rclpy.Parameter.Type.DOUBLE),
-            ("k_lin", rclpy.Parameter.Type.DOUBLE)
+            ("k_lin", rclpy.Parameter.Type.DOUBLE),
+            ("old_controller", rclpy.Parameter.Type.BOOL)
         ])
 
         #!
@@ -54,6 +55,11 @@ class SerpController(Node):
         self.get_logger().info(f"Detection by line: {self.is_detection_by_line}")
 
         #!
+        # Old controller
+        self.is_old_controller = self.get_parameter("old_controller").get_parameter_value().bool_value
+        self.get_logger().info(f"Old controller: {self.is_old_controller}")
+
+        #!
         # Proportional constants
         self.k_ang : float = self.get_parameter("k_ang").get_parameter_value().double_value
         self.get_logger().info(f"k_ang: {self.k_ang}")
@@ -70,6 +76,7 @@ class SerpController(Node):
 
         # Prepare robot start
         self.stopped = False
+        self.stop_count = 0
 
         # **** Create publishers ****
         self.pub : Publisher = self.create_publisher(Twist, "/cmd_vel", 1)
@@ -79,10 +86,35 @@ class SerpController(Node):
         self.create_subscription(LaserScan, "/static_laser", self.processLiDAR, 1)
         self.create_subscription(Odometry, "/odom", self.processOdometry, 1)
 
-        self.brake = 0
-
         # metrics
         self.distances_to_wall = np.array([])
+
+
+    #! 
+    # @brief Control the robot to follow the wall, no distance taken into account
+    # @param publisher Publisher to publish Twist messages
+    # @param distance Minimum distance from the wall from a laser
+    # @param angle_with_wall Angle with the wall
+    # @return None
+    def controlRobotOld(self, publisher : Publisher, distance : float, angle_with_wall : float):
+        
+        # Calculate errors
+        angle_error : float = angle_with_wall - self.ideal_angle
+        # Limit velocity when turning, proportional to the angle error and target velocity
+        target_speed : float = self.target_velocity / (1 + self.target_velocity * abs(angle_error))
+        velocity_error : float = self.current_velocity - target_speed
+
+        # Create commands
+        twist_msg : Twist = Twist()
+        # Angular velocity is proportional to the angle error 
+        twist_msg.angular.z : float = clamp(
+                angle_error * self.k_ang,
+                  -MAX_ABSOLUTE_ANGULAR_SPEED, MAX_ABSOLUTE_ANGULAR_SPEED)
+        twist_msg.linear.x : float = clamp(-velocity_error * self.k_lin, -MAX_ABSOLUTE_LINEAR_ACCELERATION,
+                    MAX_ABSOLUTE_LINEAR_ACCELERATION) # Linear velocity is proportional to the velocity error
+        
+        # Publish commands
+        publisher.publish(twist_msg)
 
 
     #! 
@@ -94,7 +126,6 @@ class SerpController(Node):
     def controlRobot(self, publisher : Publisher, distance : float, angle_with_wall : float):
         
         # Calculate errors
-        self.brake = 0
         angle_error : float = angle_with_wall - self.ideal_angle
         distance_error : float = distance - self.ideal_distance
         # Limit velocity when turning, proportional to the angle error and target velocity
@@ -130,12 +161,15 @@ class SerpController(Node):
             twist_msg.linear.x : float = clamp(self.current_velocity * self.k_lin, -MAX_ABSOLUTE_LINEAR_ACCELERATION,
                     MAX_ABSOLUTE_LINEAR_ACCELERATION)
             publisher.publish(twist_msg)
+        elif self.stop_count >= 2:
+            twist_msg.linear.x : float = 0.0
+            publisher.publish(twist_msg)
+            self.get_logger().info('Robot stopped!')
+            self.stopped = True
         else:
             twist_msg.linear.x : float = 0.0
             publisher.publish(twist_msg)
-
-            self.get_logger().info('Robot stopped!')
-            self.stopped = True
+            self.stop_count += 1
 
         # Collect statistics
         if self.stopped:
@@ -230,10 +264,12 @@ class SerpController(Node):
 
         self.distances_to_wall = np.append(self.distances_to_wall, [min_distance_measurement])
 
+        control_callback = self.controlRobotOld if self.is_old_controller else self.controlRobot
+
         if self.is_detection_by_line and not self.isInFinalPosByStraightLine(numpy_ranges, min_distance_measurement, min_distance_index, data.angle_increment):
-            self.controlRobot(self.pub, min_distance_measurement, angle_with_wall)
+            control_callback(self.pub, min_distance_measurement, angle_with_wall)
         elif not self.is_detection_by_line and not self.isInFinalPosByDistance(numpy_ranges, data.angle_increment):
-            self.controlRobot(self.pub, min_distance_measurement, angle_with_wall)
+            control_callback(self.pub, min_distance_measurement, angle_with_wall)
         else:
             self.stopRobot(self.pub)
 
@@ -247,6 +283,10 @@ class SerpController(Node):
         self.log_file.write(f"travelled: {self.distances_to_wall.size}\n")
         self.log_file.write(f"mean_distance_to_wall: {self.distances_to_wall.mean()}\n")
         self.log_file.write(f"elapsed: {elapsed}\n")
+        self.log_file.write("distances:")
+        for d in self.distances_to_wall:
+            self.log_file.write(f" {d}")
+        self.log_file.write("\n")
         self.log_file.close()
 
 

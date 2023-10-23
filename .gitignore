@@ -4,3 +4,5 @@
 log.txt
 *.png
 **/.vscode/*
+results/*.png
+stats.txt
