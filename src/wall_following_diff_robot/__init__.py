@@ -173,6 +173,7 @@ class SerpController(Node):
 
         # Collect statistics
         if self.stopped:
+            self.destroy_node()
             self.collectStatistics()
 
 
@@ -183,26 +184,25 @@ class SerpController(Node):
     # @param min_distance_index Index of the minimum distance from the laser
     def isInFinalPosByStraightLine(self, distances: [float], min_distance_measurement : float, 
                       min_distance_index: float, angle_increment : float) -> bool:
-        
-        progress = 0
+        state = 0
 
         for i in range(distances.size):
             d = distances[i]
 
-            if progress == 0:
+            if state == 0:
                 if d < 99:
-                    progress += 1
+                    state += 1
             
-            if progress == 1:
+            if state == 1:
                 if d > 99:
-                    progress += 1
+                    state += 1
                     continue
                 
                 distance_to_wall = (min_distance_measurement) / math.cos((abs(i - min_distance_index) * angle_increment))
                 if abs(distance_to_wall - d) > 0.3 and abs(distance_to_wall - d) < 3:
                     return False
 
-            if progress == 2:
+            if state == 2:
                 if d < 99:
                     return False
         # self.get_logger().info('Warning! Wall in the front!')
@@ -215,17 +215,16 @@ class SerpController(Node):
     # @param min_distance_measurement Minimum distance from the laser
     # @param min_distance_index Index of the minimum distance from the laser
     def isInFinalPosByDistance(self, distances: [float], angle_increment : float) -> bool:
-        
-        progress = 0
+        state = 0
 
         for i in range(distances.size - 1):
-            if progress == 0:
+            if state == 0:
                 if distances[i] < 99:
-                    progress += 1
+                    state += 1
             
-            if progress == 1:
+            if state == 1:
                 if distances[i + 1] > 99:
-                    progress += 1
+                    state += 1
                     continue
 
                 distance_between_detected_points = math.sqrt((distances[i] * distances[i]) +
@@ -235,7 +234,7 @@ class SerpController(Node):
                 if distance_between_detected_points > 0.15 and distance_between_detected_points < 3:
                     return False
 
-            if progress == 2:
+            if state == 2:
                 if distances[i] < 99:
                     return False
         # self.get_logger().info('Warning! Wall in the front!')

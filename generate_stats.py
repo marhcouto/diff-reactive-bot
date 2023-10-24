@@ -30,7 +30,7 @@ def kill(process):
 
     # kill rviz
     subprocess.run(['pkill', '-f', 'rviz'])
-    time.sleep(2)
+    time.sleep(1)
 
 
 async def run_simulation_and_read_log(pos_x=None, pos_y=None,
@@ -41,6 +41,9 @@ async def run_simulation_and_read_log(pos_x=None, pos_y=None,
     file = Path("log.txt")
     if file.exists():
         os.remove(file)
+
+    # start timer
+    start = time.time()
 
     cmd = ""
     if pos_x is not None:
@@ -67,14 +70,21 @@ async def run_simulation_and_read_log(pos_x=None, pos_y=None,
     time.sleep(1)
 
     while True:
+        elapsed = time.time() - start
+        if elapsed > 90:
+            # process is stale
+            kill(process)
+            time.sleep(10)
+            return {}
         file = Path("log.txt")
         if file.exists() and file.stat().st_size > 10:
             kill(process)
             return retrieve_stats()
+        time.sleep(1)
 
 def dump_metrics_graphics(stats, prefix=""):
     # stabilize some parameters
-    target_velocity = 0.3
+    target_velocity = 0.4
     ideal_distance = 0.5
     k_ang = 8.0
     k_lin = 1.0
@@ -84,16 +94,19 @@ def dump_metrics_graphics(stats, prefix=""):
                       == ideal_distance and stat["k_ang"] == k_ang and stat["k_lin"] == k_lin]
     for metric in ["travelled", "mean_distance_to_wall", "elapsed"]:
         plt.figure()
-        xs = [str((stat["offset_x"] + INITIAL_POSITION[0], stat["offset_y"] + INITIAL_POSITION[1])) for stat in filtered_stats]
-        ys = [stat[metric] for stat in filtered_stats]
-        plt.scatter(xs, ys, label=metric)
-        plt.legend()
+        for invert_direction in [True, False]:
+            filtered_stats_invert = [stat for stat in filtered_stats if stat["invert_direction"] == invert_direction]
+            xs = [str((stat["offset_x"] + INITIAL_POSITION[0], stat["offset_y"] + INITIAL_POSITION[1])) for stat in filtered_stats_invert]
+            ys = [stat[metric] for stat in filtered_stats_invert]
+            plt.scatter(xs, ys, label=f"{metric} (invert={invert_direction})", c="red" if invert_direction else "blue")
+            plt.legend()
         plt.savefig(f"results/{prefix}_initialpos_{metric}.png")
         plt.close()
 
     # 3d plot with k_ang as x, k_lin as y and mean_distance_to_wall as z
     filtered_stats = [stat for stat in stats if stat["target_velocity"] == target_velocity and stat["ideal_distance"]
-                      == ideal_distance and stat["offset_x"] == -2 and stat["offset_y"] == -3]
+                      == ideal_distance and stat["offset_x"] == 0 and stat["offset_y"] == -1]
+
     plt.figure()
     plt.title("mean_distance_to_wall according to k_ang and k_lin")
     xs = [stat["k_ang"] for stat in filtered_stats]
@@ -135,8 +148,8 @@ def dump_metrics_graphics(stats, prefix=""):
 
 
 def dump_distance_to_wall_graphics(stats, prefix=""):
-    for target_velocity in [0.3, 0.5]:
-        for ideal_distance in [0.5, 0.8, 1.0]:
+    for target_velocity in [0.4, 0.6]:
+        for ideal_distance in [0.5, 0.7]:
             k_ang = 8.0
             k_lin = 1.0
             name = f"timeseries_target_velocity={target_velocity}_ideal_distance={ideal_distance}_k_ang={k_ang}_k_lin={k_lin}"
@@ -149,7 +162,7 @@ def dump_distance_to_wall_graphics(stats, prefix=""):
                               == ideal_distance and stat["k_ang"] == k_ang and stat["k_lin"] == k_lin]
 
             if filtered_stats == []:
-                print(f"warning: no stats for {name}")
+                print(f"warning: no stats for {prefix}_{name}")
                 continue
 
             stat = filtered_stats[0]
@@ -171,19 +184,28 @@ async def main():
     # if READ environment variable is set, read stats from file
     if os.environ.get("READ") is not None:
         with open("stats.txt") as f:
-            for line in f.readlines():
-                stats.append(eval(line))
+            # read entire file and remove \n
+            content = f.read()
+            objects = content.split("}\n")
+            for obj in objects:
+                if obj == "":
+                    continue
+                # replace "array" by "np.array"
+                obj = obj.replace("array", "np.array")
+                if obj[-1] != "}":
+                    obj += "}"
+                stats.append(eval(obj))
     else:
         # run simulations
         print("running simulations... stats file will be overwritten")
-        time.sleep(10)
+        time.sleep(5)
         with open("stats.txt", "w") as f:
-            for old_controller in [False, True]:
-                for offset_x in [-2,0,2]:
-                    for offset_y in [-2,0,2]:
+            for old_controller in [True, False]:
+                for offset_x in [0.0,2.0]:
+                    for offset_y in [-1.0,0.0]:
                         for invert_direction in [True, False]:
-                            for target_velocity in [0.3, 0.5]:
-                                for ideal_distance in [0.5, 0.8]:
+                            for target_velocity in [0.4, 0.6]:
+                                for ideal_distance in [0.5, 0.7]:
                                     for k_ang in [8.0, 16.0]:
                                         for k_lin in [1.0, 2.0]:
                                             stat = await run_simulation_and_read_log(INITIAL_POSITION[0] + offset_x/2,
@@ -202,6 +224,8 @@ async def main():
                                             stats.append(stat)
                                             f.write(str(stat) + "\n")
                                             f.flush()
+                if old_controller:
+                    break # only run old controller once
         f.close()
 
     for old_controller in [True, False]:

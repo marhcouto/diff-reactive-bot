@@ -7,8 +7,12 @@ models:
   - name: serp
     model: "serp.model.yaml"
     pose:
-      - $eval env("ROBOT_POS_X", 5.0)
-      - $eval env("ROBOT_POS_Y", 4.0)
+      - $eval
+        math.randomseed(os.time())
+        return env("ROBOT_POS_X", math.random(4, 7))
+      - $eval
+        math.randomseed(os.time())
+        return env("ROBOT_POS_Y", math.random(3, 4))
       - 0.0
 
     # Test values

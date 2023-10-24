@@ -6,3 +6,4 @@ log.txt
 **/.vscode/*
 results/*.png
 stats.txt
+stats_old.txt
