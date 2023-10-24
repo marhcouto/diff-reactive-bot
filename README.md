@@ -29,3 +29,10 @@ $ source install/setup.bash
 ```
 $ ros2 launch wall_following_diff_robot wall_following_diff_robot.launch.py
 ```
+
+## Authors
+
+- Marcelo Couto
+- José Costa
+- Fernando Rego
+- Bruno Mendes
