@@ -1,21 +1,34 @@
 # Diff-reactive-bot
 Differential reactive robot for RI course.
 
-# Requirements
+## Directory Structure
+- **lib:** flatland2 directory
+- **src:** reactive robot source code and flatland2 environment configuration
+	- **world:** environment definition
+    - **rviz:** rviz graphical interface configuration
+    - **launch:** launch file
+    - **wall_following_diff_robot:** differential drive robot code
+- **docs:** paper
+- **results (empty):** statistics generated from 'generate_stats.py' script
+
+
+
+## Dependencies
 
 - ROS 2 Humble
     - [Official installation guide](https://docs.ros.org/en/humble/Installation.html)
+- Flatland2 - included as git submodule, follow instructions to clone repo
 
-# Installation
+## Installation
 
-## Clone Repository
+### Clone Repository
 ```
 $ git clone git@github.com:marhcouto/diff-reactive-bot.git
 $ cd diff-reactive-bot/
 $ git submodule update --init --recursive
 ```
 
-## Setup and build project
+### Setup and build project
 
 In the root directory:
 
