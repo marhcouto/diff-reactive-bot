@@ -7,23 +7,17 @@ Differential reactive robot for RI course
     - [Official installation guide](https://docs.ros.org/en/humble/Installation.html)
 
 # Installation
+
+## Clone Repository
 ```
 $ git clone git@github.com:marhcouto/diff-reactive-bot.git
 $ cd diff-reactive-bot/
 $ git submodule update --init --recursive
 ```
 
-## Setup and build flatland
-
-```
-$ cd lib/flatland2/
-$ rosdep install -i --from-path src --rosdistro humble -y
-$ colcon build
-$ source install/setup.bash
-$ cd ../../
-```
-
 ## Setup and build project
+
+In the root directory:
 
 ```
 $ rosdep install -i --from-path src --rosdistro humble -y

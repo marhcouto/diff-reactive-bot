@@ -1,0 +1,354 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{ROS2 Wall-Following Differential Reactive Robot\\}
+
+\author{\IEEEauthorblockN{Bruno Mendes}
+\IEEEauthorblockA{\textit{M.EIC} \\
+\textit{FEUP}\\
+Porto, Portugal \\
+up201906166@edu.fe.up.pt}
+\and
+\IEEEauthorblockN{Fernando Rego}
+\IEEEauthorblockA{\textit{M.EIC} \\
+\textit{FEUP}\\
+Porto, Portugal \\
+up201905951@edu.fe.up.pt}
+\and
+\IEEEauthorblockN{José Costa}
+\IEEEauthorblockA{\textit{M.EIC} \\
+\textit{FEUP}\\
+Porto, Portugal \\
+up201907216@edu.fe.up.pt}
+\and
+\IEEEauthorblockN{Marcelo Couto}
+\IEEEauthorblockA{\textit{M.EIC} \\
+\textit{FEUP}\\
+Porto, Portugal \\
+up201906086@edu.fe.up.pt}
+}
+
+\maketitle
+
+\begin{abstract}
+This paper exposes the development of the software for a wall-following differential drive robot with differential locomotion and reactive behaviour, with the ability to stop upon detection of sharp, small, straight sections through sensors. ROS2 was used for the implementation and Flatland2 simulator was used for validation and evaluation. The methodology developed uses a 2D LiDAR sensor and simple proportional controllers to control the robot's motion. The experimentation carried out validated the system and gave insight on the relevance of parameter tuning.
+\end{abstract}
+
+\begin{IEEEkeywords}
+reactive robot, differential drive, wall following robot, ROS2, ROS2 Flatland, LiDAR
+\end{IEEEkeywords}
+
+\section{Introduction}
+It is common for robots to build an internal world representation to support intricate actions through complex decision-making. However, not all tasks require such complicated, computationally and hardware-expensive systems to be completed. Simple reactive behaviours can mimic intelligence. A common example is the first 6 generations of Roomba vacuum cleaners (up to 2015), which lack complex world representation and make use of bumper contact and infrared sensors to detect and avoid obstacles. State of the art of wall-following robots will be discussed in Section \ref{stateOfArt}.
+
+This article describes the architecture and implementation of a robot that searches for a wall and follows it until it detects a sharp small straight segment, stopping afterwards. The robot has no internal state representation or world map, as it follows a purely subsumption model, relying on its sensors to decide on the next action to execute. Section \ref{behaviour} will expand on the behaviour model and Section \ref{environment} will define the test environment, assumptions, and constraints.
+
+Functionality is built with ROS2 "Humble Hawksbill". A modified version of Flatland to support ROS2 was used to simulate the environment. Visualization is provided by RViz. The robot simulated by Flatland2 is based on FEUP's SERP2 robot, a differential drive robot built around an Arduino + RPi platform. It includes a LiDAR sensor to detect obstacles. Relevant details on the supporting technologies and the implemented algorithm will be analyzed in Section \ref{implementation}.
+
+The achieved results will be presented and discussed in Section \ref{results}. Section \ref{conclusion} concludes the article and suggests possible improvements.
+
+\section{State of the art} \label{stateOfArt}
+Wall-following is a common task in the robotics field; as such, the literature on the subject is extensive and several approaches for solving the issue emerged.
+\subsection{Navigation algorithms}
+Popular approaches include mapping, especially simultaneous localisation and mapping (SLAM), potential-field approaches and reactive approaches. \cite{6630903}
+\subsubsection{Mapping approaches}
+Mapping approaches keep the robot's state and location, estimated or inferred by some environment marker, as well as a detailed environment map, either uploaded or built and updated on the fly (SLAM), and navigate the environment by using this information. This method proves itself computationally expensive as the robot's view of the environment needs to be constantly updated.
+\subsubsection{Potential-field approaches}
+Making use of gradients, robots are expected to move from locations with high potential to locations with lower potential. In this paradigm, obstacles represent locations of very high potential, which the algorithms avoid. This methodology requires prior environmental knowledge, which isn't always available.
+\subsubsection{Reactive approaches}
+Navigation decisions are made solely on currently available data provided by the robot's sensors. This means that the robot has limited knowledge of the environment around it. However, this renders the method less computationally intensive, yielding faster response times.
+
+The aforementioned navigation methods are unable to solve dynamic obstacle avoidance. By using current data, a side-effect of reactive algorithms is being capable of reacting to changing environments, making these methods desirable for applications that require simple navigation of dynamic heterogeneous layouts, like cleaning and disinfection \cite{9826258}. 
+
+\subsection{Perception}
+Recent publications focus on the use of fuzzy logic to process sensor data and control the robot. In this context, distances to the wall translate to intervals that represent relative distances to the wall used as fuzzy sets (near, medium, far). These intervals are then used as input to an inference engine with fine-tuned thresholds that decide on what direction to turn, deciding between left, right or straight. The decision is then converted to crisp logic through defuzzification, outputting a turning angle.
+
+The work of Li and Wang\cite{7166006} uses notions from human experience to define the relative input thresholds and the fuzzy decision engine criteria. Genetic algorithms have been studied to tune these parameters \cite{5159805}.
+
+\subsection{Control}
+Most work being developed regarding the control of autonomous agents is in the field of autonomous driving. On this front, model-based approaches are popular, and much of the work developed explores different methodologies of employing improving the fidelity of the models and performance of the algorithms, such as in \cite{7225830}. In recent years, with the development of computational power and the rise of Machine Learning techniques, a shift in the focus on mobile robotics can also be noticed towards the study of Reinforcement Learning as a tool for motion control. The usage of fuzzy logic has also been trending. Cheng-Hung and Jeng \cite{math8081254} have employed both these techniques to come up with a unique controller for wall-following robots. However, these are not all the approaches available for the control of a wall-following robot. Simpler methodologies have proven their success in earlier ages such as in \cite{677372}. It is also worth noting the versatility of PID controllers, making these a valid and commonly applied option in mobile robotics, notably in \cite{lee2018design, normey2001mobile}. 
+
+\section{Problem statement} \label{environment}
+
+The goal of the proposed project was the development of a 2D Reactive robot designed to autonomously track and follow a wall, with the specific goal of navigating until the detection of a sharp rectangular edged zone of the wall within the world it operates in. 
+
+\subsection{The Map}
+
+The map is shaped like a question mark "?", with an imperfect circle above and a circular termination at the upper end. The lower part forms a straight and edgy contour.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.1\textwidth]{img/map.png}
+    \caption{Simulation map with start area highlighted in green}
+    \label{fig:map}
+\end{figure}
+
+Figure \ref{fig:map} represents the map and highlights the robot's initial position, in an undetermined place inside the green area.
+
+\subsection{The Robot}
+
+A robot with a round structure and employing a differential locomotion system was used. This differential locomotion system implies that the movement is based on two independently controlled wheels on either side of the body. However, the simulation environment used only allowed for the control of the motion of the robot as a whole, not the wheels independently.
+Furthermore, the robot is to be equipped with sensors that enable it to perceive the world state. Our exteroceptive sensor of choice is a 2D LiDAR (Light Detection and Ranging) sensor, which calculates the distance to a surface or object by measuring the time for the reflected light to return to the receiver. Particularly, this sensor performs measurements in a complete 360º range around the robot, at 4º intervals, featuring 90 laser beams. This configuration offers, to some extent, comprehension of the state of the world.
+
+% NOTE: define the state of the world as a conjunction of angle with the wall, distance to wall and current velocity; define the angle as theta and distance as d anv velocity as v; paste the image for illustration (like the one in the slides); define the ideal angle value and refer the usage of different goal distances and velocities
+
+\subsection{Representation of the world} 
+
+The state of the world can be represented by three major aspects. Firstly, the angle relative to the perpendicular to the wall, $\theta$, which, having in mind that the robot should maintain a parallel course alongside the wall, this angle would ideally be 90º or -90º, depending on the direction of circulation.
+
+Secondly, it was considered the distance to the wall, $d$. It's necessary to possess knowledge regarding the distance between the robot and the wall. Additionally, an ideal distance to the wall can be defined to perform adjustments along the robot's course.
+
+The third aspect is the current velocity of the robot, $v$. 
+
+The motion of the robot is controlled via linear acceleration $a$ and angular velocity $\omega$ commands. In pursuit of a more realistic simulation and for experimental reasons, configurable limits were imposed on the maximum and minimum variables of these control variables. 
+
+\section{Behavioural model} \label{behaviour}
+Evoking the subsumption model proposed by Brooks \cite{1087032}, it is possible to build higher-order behaviours, materialised in the robot's actuators' outcomes, by using sensor data and outputs of lower competence layers, subsuming their roles, either by agreeing with their outputs or changing them to achieve the greater goal.
+
+In the following subsections, the desired behaviours will be staged from lower to higher order.
+
+\subsection{Wander until wall}
+Move around the environment until a wall is found.
+
+For the sake of simplicity, we assume that this behaviour is implemented through another mechanism, as all the initial robot positions for testing guarantee that a wall is always found. 
+
+\subsection{Keep distance from the wall}
+If a wall is found, face the robot side and move parallel to it, optionally with an ideal distance to the wall.
+
+\subsection{Stop if a small straight section is found}
+Upon detection of a small straight section bring the robot to a halt.
+
+\section{Architecture and implementation} \label{implementation}
+
+\subsection{Simulation Environment}
+
+As previously noted, the simulation environment used was an altered version of the Flatland2 simulator \cite{flatland2}, made to work with ROS2. This version of the simulator was further altered to contain a second implementation of a differential drive robot, which would take acceleration commands instead of velocity commands\cite{flatland3}. Such implementation was carried out to provide closer control of the motion of the robot and match a real scenario.
+
+Flatland2 is a two-dimensional simulator that uses RVIZ for visualisation purposes. It is particularly useful for simple simulations that can benefit from time acceleration, such as Reinforcement Learning experiments or evaluation of a system with multiple parameter combinations. The simulator also allows for the usage of a laser scanner, which is our sensor of choice.
+
+\subsection{Architecture}
+We used ROS2 to develop our system and, as such, our program maps to a ROS2 node. Being a simple robot, the robot was programmed as a single object with multiple functions. The robot system developed follows a reactive architecture, only divided into 4 different models:
+\begin{itemize}
+    \item Perception
+    \item Wall Following Control
+    \item Stopping Control
+    \item Stop Criteria
+\end{itemize}
+
+Additionally, there is an odometry callback function only used to draw the necessary information regarding the velocity of the robot at a certain point in time. Figure \ref{fig:activity-diagram} depicts an activity diagram that illustrates the workflow of the program. The components diagram in Figure \ref{fig:components-diagram} can help visualise the environment in which the system is tested.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.4\textwidth]{img/activity-diagram.png}
+    \caption{Activity Diagram}
+    \label{fig:activity-diagram}
+\end{figure}
+
+\subsection{Perception}
+The perception model is the one that transforms the data sent by the simulator regarding the laser scanner into the image of the current world state. It does so following a simple algorithm:
+\begin{enumerate}
+    \item select the laser with the smallest distance measurement
+    \item calculate the angle to between the direction the robot is facing and the perpendicular to the wall taking into account the angle increments between lasers and the index of the laser selected
+\end{enumerate}
+
+\begin{equation} \label{eq:perception}
+    \theta = i \times a + m
+\end{equation}
+
+The formula used to calculate the angle is described in \ref{eq:perception}, where $\theta$ is the angle intended to be calculated, $i$ is the index of the laser in the array, $a$ is the angle between lasers and m is starting laser's angle value. 
+
+The choice behind this controller can be justified by the incremental spirit of the development of this project: following investigation, the simplest solution available is implemented; if it does not suit the problem, it is upgraded; otherwise, it is left as is.
+
+\subsection{Stop Criteria}
+
+To detect the final sharp small straight section in order to stop the robot, two distinct approaches were developed. It is important to note that both approaches share in common the main following steps:
+
+\begin{enumerate}
+    \item The robot iterates through the array of distances, given by LiDAR, until the wall is detected
+    \item Upon wall detection, each approach validates the distance to the wall of each laser beam until the first laser beam that does not detect any object. If any validation fails it means that does not correspond to the final wall
+    \item Finally, the robot confirms that no other object is present
+\end{enumerate}
+
+To introduce some flexibility to each validation method, the robot can not only identify the final straight wall but also accommodate situations where the robot detects more distant walls from the map. In these scenarios, the validation methods accept detected distances that deviate significantly from the calculated distances, $d_i$ in the first criteria and $d_{ij}$ in the second criteria.
+
+The two distinct criteria utilised to detect the final straight are described below.
+
+\subsubsection{Straight line based criteria}
+
+The first criteria developed is based on straight-line calculations. It assumes that the laser beam with the shortest detected distance represents the normal relative to the wall (straight line), thereby allowing the calculation of the distance to the wall for the other laser beams.
+
+\begin{equation} \label{eq:straight_line1}
+    \alpha_i = (|i - i_{min}|) \times a
+\end{equation}
+
+\begin{equation} \label{eq:straight_line2}
+    d_i = d_{min} / \cos{\alpha_i}
+\end{equation}
+
+The formula to calculate the angle and the associated distance are \ref{eq:straight_line1} and \ref{eq:straight_line2}, respectively, where:
+\begin{itemize}
+    \item $i_{min}$ is the index of the laser in the array that detect the smallest distance
+    \item $i$ is the index of the laser in the array to validate
+    \item $a$ is the angle between lasers
+    \item $\alpha_i$ is the angle of the laser beam in index $i$ with the normal relative to the wall
+    \item $d_{min}$ is the smallest distance measurement
+    \item $d_i$ is the calculated distance for the sensor in index $i$
+\end{itemize}
+
+The validation in this approach is straightforward. It involves a direct comparison between the distance measure by the laser beam to the calculated distance. Naturally, considering sensor noise and potential inaccuracies, a margin of error of 0.3 units was allowed after fine-tuning the validation method.
+
+\subsubsection{Distance based criteria}
+
+The second criteria, which relies on the distances between consecutive wall points detected by each laser, was chosen due to specific relevant aspects according to the map. The distances between consecutive wall points can be calculated using the Law of cosines, where:
+\begin{itemize}
+    \item $a$ is the angle between lasers
+    \item $d_i$ is the distance measurement of the laser beam in index $i$
+    \item $d_j$ is the distance measurement of the laser beam in index $j$
+    \item $d_{ij}$ is the calculated distance between detected points by laser beam in index $i$ and $j$
+    \item $i$ and $j$ are consecutive array indexes
+\end{itemize}
+
+\begin{equation} \label{eq:distances}
+    d_{ij} = \sqrt{ d_i^2 + d_j^2 - 2 * d_i * d_j * \cos{a} }
+\end{equation}
+
+Given the short length of the final wall and the narrow angle between the laser beams, and in line with the first criteria, accounting for sensor noise and potential inaccuracies, a margin of 0.15 units was allowed as the maximum distance between consecutively detected points after refining the validation method.
+
+\subsection{Wall Following Control}
+
+The wall following control aims to maintain a certain distance from the wall and a certain velocity at the same time. Despite the many advanced techniques used for motion control nowadays, this project did not require such complex methodologies to yield good results. As such, the controllers implemented for the linear acceleration and angular velocity commands were simple Proportional controllers. 
+
+For angular velocity control, two controllers were developed:
+
+\begin{itemize}
+    \item The first controller only took the angle error into account (i.e. the difference between the $\theta$ and its ideal value)
+    \item The second controller took both the angle error and the distance error
+\end{itemize}
+
+\begin{equation} \label{eq:control1}
+    \omega = \theta_e * k\_a
+\end{equation}
+
+\begin{equation} \label{eq:control2}
+    \omega = \theta_e * k_a + d_e * k_a * dir
+\end{equation}
+
+The formulas of both of these controllers are \ref{eq:control1} and \ref{eq:control2} respectively, where:
+\begin{itemize}
+    \item $\omega$ is the angular velocity
+    \item $\theta_e$ is the angle error
+    \item $d_e$ is the distance error
+    \item $dir$ is a binary variable that denotes the signal of the ideal angle (1 or -1, depending on on which side of the robot was the wall)
+    \item $k_a$ is a multiplying linear factor that was tuned for the best performance  %NOTE: give result value
+\end{itemize}
+
+For linear acceleration control, the controller developed can be viewed as a chain of two controllers:
+\begin{itemize}
+    \item the first controller outputs goal velocity given the fixed target velocity and the current angle error. The idea is to slow down when making trajectory adjustments to not get too far from the trajectory e.g. get far away from the wall or collide with it
+    \item the second controller takes the velocity error (i.e. the difference between the current velocity and the aforementioned goal velocity) and outputs a proportional linear acceleration value
+\end{itemize}
+
+\begin{equation} \label{eq:control4}
+    a = k_l * gv_e
+\end{equation}
+
+\begin{equation} \label{eq:control3}
+    gv = \dfrac{v}{(1 + v * \mod{\theta_e})}
+\end{equation}
+
+Once again, the first controller in the chain is given by \ref{eq:control3} while the second is given by \ref{eq:control4}, where:
+\begin{itemize}
+    \item $gv$ is the goal velocity
+    \item $\theta_e$ is the angle error
+    \item $v$ is the target velocity
+    \item $a$ is the linear acceleration
+    \item $gv_e$ is the velocity error
+    \item $k_l$ is a multiplying linear factor that was tuned for the best performance  %NOTE: give result value
+\end{itemize}
+
+The formula in \ref{eq:control3} was idealised such that the goal velocity would be the same as the target velocity if the angle error was 0, but it would also be smaller the greater the angle error and the target velocity values were. This last measure was taken following experimental trials in which the actual velocity of the robot was too great while the robot was facing forward against the wall for higher values of target velocity, leading to collisions.
+
+\subsection{Stopping Control}
+
+The stopping control robot aims to control the acceleration command in order to bring the robot to a stop. It uses the formula described in \ref{eq:control4}, where the velocity error is just the symmetrical of the current velocity. The robot is considered to have come to a complete stop when the indicated absolute velocity is smaller than 0.01 for more than 2 following measures. The latter measure is taken to reduce the influence of odometry noise. These values were obtained through experimental tuning.
+
+\section{Results and discussion} \label{results}
+
+To evaluate the effectiveness of different hyper-parameters, such as \(k_ang\) or \(k_lin\), and to compare the two different controllers implemented, an external custom script was developed to orchestrate the launch several instances of the robot node, taking advantage of \textit{ROS2 Parameters}.
+
+Increasing the target velocity of the robot makes it reach its final destination sooner, but it leads to slightly greater instability in its movement, as depicted in \ref{fig:distance_timeseries_newc1} and \ref{fig:distance_timeseries_newc2}. Results also indicate that the new controller was not that great of an improvement, as the old one was already very stable, which can be seen in \ref{fig:distance_timeseries_oldc}.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.4\textwidth]{img/newc_timeseries_target_velocity=0.4_ideal_distance=0.5_k_ang=8.0_k_lin=1.0.png}
+    \label{fig:distance_timeseries_newc1}
+    \caption{Distance to the wall with target\_velocity=0.4 and ideal\_distance=0.5.}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.4\textwidth]{img/newc_timeseries_target_velocity=0.6_ideal_distance=0.5_k_ang=8.0_k_lin=1.0.png}
+    \caption{Distance to the wall with target\_velocity=0.6 and ideal\_distance=0.5.}
+    \label{fig:distance_timeseries_newc2}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.4\textwidth]{img/oldc_timeseries_target_velocity=0.4_ideal_distance=0.5_k_ang=8.0_k_lin=1.0.png}
+    \caption{Distance to the wall with target\_velocity=0.6 and ideal\_distance=0.5 using old controller.}
+    \label{fig:distance_timeseries_oldc}
+\end{figure}
+
+Although not shown here, due to the lack of results, increasing the target velocity past the unit and the target distance past the unit renders the stopping criteria blind to the final destination. That is expected due to the way it is implemented (refer to section IV).
+
+The robot is able to wander close to the wall and reach its final position, independently of the starting position as per the requirements. Inverting its direction (i.e. maintaining a positive perpendicular angle to the wall) haves the time needed to travel the path, as it is shorter.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.4\textwidth]{img/newc_initialpos_elapsed.png}
+    \caption{Elapsed time according to start position.}
+    \label{fig:elapsed_initialpos}
+\end{figure}
+
+\(k_ang\) and \(k_lin\) play a significant role in the outcome of the robot's journey. Modifying the angle of the robot and its linear acceleration in greater steps means that the robot tries to fix its trajectory more aggressively: it is then closer to its target distance to the wall but it may also lead to it hitting the wall if it is too close to it.
+
+\section{Conclusions and future work} \label{conclusion}
+
+The developed reactive robot, although not as accurate as recent SLAM robots, is able to wander close to the wall under different circumstances, and does not show a significant amount of false positives in the stopping criteria.
+
+Future improvements could include the switch to a PID controller, to improve the overall quality of the travelled path. The stopping criteria also deserves some attention: a switch to a more complex SLAM-based agent enabling recognition of the target region would most likely improve results.
+
+
+\pagebreak
+
+\bibliographystyle{ieeetr}
+\bibliography{Bib/references}
+
+\newpage
+\appendix
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.4\textwidth]{img/component-diagram.png}
+    \caption{Components Diagram}
+    \label{fig:components-diagram}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.45\textwidth]{img/newc_kangklin.png}
+    \label{fig:mean_distance_kang_klin_newc}
+    \caption{Mean distance to the wall according to hyper-parameters (ideal\_distance=0.5).}
+\end{figure}
+
+\end{document}
