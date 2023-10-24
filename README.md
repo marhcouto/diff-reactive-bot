@@ -1,5 +1,5 @@
-# diff-reactive-bot
-Differential reactive robot for RI course
+# Diff-reactive-bot
+Differential reactive robot for RI course.
 
 # Requirements
 
